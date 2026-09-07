@@ -7,6 +7,8 @@ from pyspark.sql.types import (
     StructType,
 )
 
+from pyspark.sql import functions as F
+from retail_lakehouse.utils.quality import add_quality_columns
 from retail_lakehouse.config.settings import get_environment, get_datasets
 from retail_lakehouse.utils.helpers import build_raw_path, generate_batch_id
 from retail_lakehouse.utils.metadata import add_ingestion_metadata
@@ -108,20 +110,64 @@ df = add_ingestion_metadata(
     batch_id=batch_id,
 )
 
+# COMMAND ----------
+
+# Record-level data quality
+
+df = add_quality_columns(df)
+
 
 # COMMAND ----------
 
-# Write to managed Bronze Delta table
+
+# COMMAND ----------
+
+# Write valid and quarantined records
+
+quarantine_table = f"{catalog}.bronze_quarantine.customers"
+
+
+def process_batch(batch_df, batch_id):
+
+    valid_df = batch_df.filter(
+        F.col("_quality_status") == "VALID"
+    )
+
+    quarantine_df = batch_df.filter(
+        F.col("_quality_status") == "QUARANTINE"
+    )
+
+    (
+        valid_df.write
+        .format("delta")
+        .mode("append")
+        .saveAsTable(target_table)
+    )
+
+    (
+        quarantine_df.write
+        .format("delta")
+        .mode("append")
+        .saveAsTable(quarantine_table)
+    )
+
+    print(
+        f"Processed micro-batch {batch_id}: "
+        f"valid → {target_table}, "
+        f"quarantine → {quarantine_table}"
+    )
+
 
 query = (
     df.writeStream
-    .format("delta")
+    .foreachBatch(process_batch)
     .option("checkpointLocation", checkpoint_path)
     .outputMode("append")
     .trigger(availableNow=True)
-    .toTable(target_table)
+    .start()
 )
 
 query.awaitTermination()
 
 print(f"Customers ingestion completed: {target_table}")
+print(f"Customers quarantine completed: {quarantine_table}")
