@@ -1,0 +1,22 @@
+environments:
+
+  dev:
+    catalog: retail_dev
+    raw_root: abfss://raw@dataloadadlsproject.dfs.core.windows.net
+    checkpoint_root: abfss://checkpoints@dataloadadlsproject.dfs.core.windows.net/dev
+    schema_root: abfss://checkpoints@dataloadadlsproject.dfs.core.windows.net/schema/dev
+    environment: dev
+
+  staging:
+    catalog: retail_staging
+    raw_root: abfss://raw@dataloadadlsproject.dfs.core.windows.net
+    checkpoint_root: abfss://checkpoints@dataloadadlsproject.dfs.core.windows.net/staging
+    schema_root: abfss://checkpoints@dataloadadlsproject.dfs.core.windows.net/schema/staging
+    environment: staging
+
+  prod:
+    catalog: retail_prod
+    raw_root: abfss://raw@dataloadadlsproject.dfs.core.windows.net
+    checkpoint_root: abfss://checkpoints@dataloadadlsproject.dfs.core.windows.net/prod
+    schema_root: abfss://checkpoints@dataloadadlsproject.dfs.core.windows.net/schema/prod
+    environment: prod

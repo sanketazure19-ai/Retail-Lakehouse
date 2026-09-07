@@ -1,0 +1,9 @@
+resources:
+  jobs:
+    bronze_ingestion:
+      name: "[${bundle.target}] Retail Lakehouse - Bronze Ingestion"
+
+      tasks:
+        - task_key: bronze_customers
+          notebook_task:
+            notebook_path: ../../src/notebooks/01_bronze_customers.py

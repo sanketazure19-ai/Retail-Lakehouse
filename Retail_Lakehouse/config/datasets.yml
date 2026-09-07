@@ -1,0 +1,37 @@
+datasets:
+
+  erp:
+
+    customers:
+      path: erp/customers
+      format: csv
+      ingestion: autoloader
+
+    products:
+      path: erp/products
+      format: csv
+      ingestion: autoloader
+
+    orders:
+      path: erp/orders
+      format: csv
+      ingestion: autoloader
+
+  ecommerce:
+
+    clickstream:
+      path: ecommerce/clickstream
+      format: csv
+      ingestion: autoloader
+
+    returns:
+      path: ecommerce/returns
+      format: csv
+      ingestion: autoloader
+
+  marketing:
+
+    promotions:
+      path: marketing/promotions
+      format: csv
+      ingestion: batch
