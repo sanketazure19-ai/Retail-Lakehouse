@@ -7,10 +7,10 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from config.settings import get_environment, get_datasets
-from utils.helpers import build_raw_path, generate_batch_id
-from utils.metadata import add_ingestion_metadata
-from utils.validation import validate_required_columns
+from retail_lakehouse.config.settings import get_environment, get_datasets
+from retail_lakehouse.utils.helpers import build_raw_path, generate_batch_id
+from retail_lakehouse.utils.metadata import add_ingestion_metadata
+from retail_lakehouse.utils.validation import validate_required_columns
 
 
 # COMMAND ----------

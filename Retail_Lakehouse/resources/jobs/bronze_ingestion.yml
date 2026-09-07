@@ -3,7 +3,17 @@ resources:
     bronze_ingestion:
       name: "[${bundle.target}] Retail Lakehouse - Bronze Ingestion"
 
+      environments:
+        - environment_key: default
+          spec:
+            client: "4"
+            dependencies:
+              - ../../dist/*.whl
+
       tasks:
         - task_key: bronze_customers
+
           notebook_task:
             notebook_path: ../../src/notebooks/01_bronze_customers.py
+
+          environment_key: default

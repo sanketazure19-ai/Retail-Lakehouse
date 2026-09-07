@@ -8,6 +8,12 @@ sync:
   include:
     - src/**
     - config/**
+  exclude:
+    - .venv/**
+    - .databricks/**
+    - .vscode/**
+    - tests/**
+    - "**/__pycache__/**"
 
 targets:
 
