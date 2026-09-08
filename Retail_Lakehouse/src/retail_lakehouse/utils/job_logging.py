@@ -10,8 +10,15 @@ from pyspark.sql.types import (
 )
 
 
-def get_job_context(dbutils) -> dict:
+def get_job_context(spark, dbutils) -> dict:
     context = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+
+    def get_tag_value(name: str) -> str | None:
+        try:
+            value = context.tags().get(name)
+            return value.get() if value.isDefined() else None
+        except Exception:
+            return None
 
     def get_context_value(name: str) -> str | None:
         try:
@@ -20,27 +27,27 @@ def get_job_context(dbutils) -> dict:
         except Exception:
             return None
 
-    def get_tag_value(name: str) -> str | None:
+    def get_spark_conf(name: str) -> str | None:
         try:
-            tags = context.tags()
-            value = tags.get(name)
-            return value.get() if value.isDefined() else None
+            value = spark.conf.get(name, None)
+            return value if value else None
         except Exception:
             return None
 
     job_id = (
         get_tag_value("jobId")
         or get_context_value("jobId")
+        or get_spark_conf("spark.databricks.job.id")
     )
 
     run_id = (
         get_tag_value("jobRunId")
-        or get_context_value("currentRunId")
+        or get_spark_conf("spark.databricks.job.runId")
     )
 
     task_run_id = (
         get_tag_value("taskRunId")
-        or get_context_value("currentRunId")
+        or get_spark_conf("spark.databricks.job.taskRunId")
     )
 
     return {

@@ -21,7 +21,7 @@ dbutils.widgets.text("environment", "dev")
 
 environment = dbutils.widgets.get("environment")
 
-job_context = get_job_context(dbutils)
+job_context = get_job_context(spark, dbutils)
 
 task_key = "promotions_ingestion"
 notebook_name = "04_promotions_ingestion"
