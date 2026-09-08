@@ -528,3 +528,33 @@ def build_product_revenue_summary(
             - F.col("refund_amount"),
         )
     )
+def build_promotion_product_summary(
+    promotions_df: DataFrame,
+    products_df: DataFrame,
+) -> DataFrame:
+    return (
+        promotions_df
+        .join(
+            products_df.select(
+                "product_id",
+                "product_name",
+                "category",
+                "subcategory",
+                "brand",
+            ),
+            on="product_id",
+            how="left",
+        )
+        .select(
+            "promotion_id",
+            "promotion_name",
+            "product_id",
+            "product_name",
+            "category",
+            "subcategory",
+            "brand",
+            "start_date",
+            "end_date",
+            "discount_percent",
+        )
+    )
