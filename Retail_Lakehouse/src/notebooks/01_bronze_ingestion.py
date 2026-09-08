@@ -42,7 +42,7 @@ environment = dbutils.widgets.get("environment")
 domain = dbutils.widgets.get("domain")
 dataset_name = dbutils.widgets.get("dataset")
 
-job_context = get_job_context(spark,dbutils)
+job_context = get_job_context(spark, dbutils)
 
 task_key = f"bronze_{dataset_name}"
 notebook_name = "01_bronze_ingestion"
