@@ -1,5 +1,4 @@
 # Databricks notebook source
-
 from pyspark.sql.types import (
     DateType,
     StringType,
@@ -115,9 +114,6 @@ df = add_ingestion_metadata(
 # Record-level data quality
 
 df = add_quality_columns(df)
-
-
-# COMMAND ----------
 
 
 # COMMAND ----------
