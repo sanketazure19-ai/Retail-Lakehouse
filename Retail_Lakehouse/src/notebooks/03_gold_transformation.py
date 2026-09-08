@@ -2,11 +2,13 @@
 
 from retail_lakehouse.config.settings import get_environment
 from retail_lakehouse.utils.gold import (
+    build_customer_sales_summary,
     build_customer_scd2_source,
     build_dim_date,
     build_dim_product,
     build_fact_orders,
     build_fact_returns,
+    build_product_sales_summary,
     merge_customer_scd2,
 )
 
@@ -36,6 +38,8 @@ gold_tables = {
     "fact_orders": f"{catalog}.gold.fact_orders",
     "fact_returns": f"{catalog}.gold.fact_returns",
     "dim_date": f"{catalog}.gold.dim_date",
+    "customer_sales_summary": f"{catalog}.gold.customer_sales_summary",
+    "product_sales_summary": f"{catalog}.gold.product_sales_summary",
 }
 
 
@@ -76,13 +80,12 @@ fact_returns_df = build_fact_returns(
     returns_df
 )
 
+customer_sales_summary_df = build_customer_sales_summary(
+    fact_orders_df
+)
 
-# COMMAND ----------
-
-date_df = build_dim_date(
-    spark=spark,
-    start_date="2020-01-01",
-    end_date="2030-12-31",
+product_sales_summary_df = build_product_sales_summary(
+    fact_orders_df
 )
 
 
@@ -122,6 +125,31 @@ merge_customer_scd2(
 )
 
 (
+    customer_sales_summary_df.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(gold_tables["customer_sales_summary"])
+)
+
+(
+    product_sales_summary_df.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(gold_tables["product_sales_summary"])
+)
+
+
+# COMMAND ----------
+
+date_df = build_dim_date(
+    spark=spark,
+    start_date="2020-01-01",
+    end_date="2030-12-31",
+)
+
+(
     date_df.write
     .format("delta")
     .mode("overwrite")
@@ -138,3 +166,11 @@ print(f"Product dimension: {gold_tables['dim_product']}")
 print(f"Orders fact: {gold_tables['fact_orders']}")
 print(f"Returns fact: {gold_tables['fact_returns']}")
 print(f"Date dimension: {gold_tables['dim_date']}")
+print(
+    f"Customer sales summary: "
+    f"{gold_tables['customer_sales_summary']}"
+)
+print(
+    f"Product sales summary: "
+    f"{gold_tables['product_sales_summary']}"
+)

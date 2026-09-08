@@ -290,3 +290,36 @@ def build_dim_date(
         .withColumn("day_of_week", F.dayofweek("date"))
         .withColumn("day_name", F.date_format("date", "EEEE"))
     )
+
+def build_customer_sales_summary(
+    orders_df: DataFrame,
+) -> DataFrame:
+
+    return (
+        orders_df
+        .groupBy("customer_id")
+        .agg(
+            F.countDistinct("order_id").alias("order_count"),
+            F.sum("quantity").alias("units_sold"),
+            F.sum("gross_amount").alias("gross_sales_amount"),
+            F.sum("discount_amount").alias("discount_amount"),
+            F.sum("net_sales_amount").alias("net_sales_amount"),
+        )
+    )
+
+
+def build_product_sales_summary(
+    orders_df: DataFrame,
+) -> DataFrame:
+
+    return (
+        orders_df
+        .groupBy("product_id")
+        .agg(
+            F.countDistinct("order_id").alias("order_count"),
+            F.sum("quantity").alias("units_sold"),
+            F.sum("gross_amount").alias("gross_sales_amount"),
+            F.sum("discount_amount").alias("discount_amount"),
+            F.sum("net_sales_amount").alias("net_sales_amount"),
+        )
+    )
