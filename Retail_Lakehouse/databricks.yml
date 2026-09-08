@@ -20,11 +20,18 @@ targets:
   dev:
     mode: development
     default: true
+    workspace:
+      host: https://adb-7405604563582301.1.azuredatabricks.net
+      root_path: /Workspace/Users/sanketazure19@gmail.com/.bundle/${bundle.name}/${bundle.target}
 
   staging:
     mode: development
+    workspace:
+      host: https://adb-7405604563582301.1.azuredatabricks.net
+      root_path: /Workspace/Users/sanketazure19@gmail.com/.bundle/${bundle.name}/${bundle.target}
 
   prod:
     mode: production
     workspace:
+      host: https://adb-7405604563582301.1.azuredatabricks.net
       root_path: /Workspace/Users/sanketazure19@gmail.com/.bundle/${bundle.name}/${bundle.target}
