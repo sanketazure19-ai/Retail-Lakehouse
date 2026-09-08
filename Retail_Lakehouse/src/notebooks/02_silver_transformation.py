@@ -1,8 +1,6 @@
 # Databricks notebook source
 
 from datetime import datetime, timezone
-
-from pyspark import dbutils
 from pyspark.sql import functions as F
 
 from retail_lakehouse.config.settings import (
@@ -34,7 +32,7 @@ environment = dbutils.widgets.get("environment")
 domain = dbutils.widgets.get("domain")
 dataset_name = dbutils.widgets.get("dataset")
 job_id = dbutils.widgets.get("job_id")
-job_run_id = dbutils.widgets.get("job.run_id")
+job_run_id = dbutils.widgets.get("job_run_id")
 task_run_id = dbutils.widgets.get("task_run_id")
 
 job_context = {
