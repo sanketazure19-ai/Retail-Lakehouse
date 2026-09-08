@@ -7,33 +7,36 @@ def add_quality_columns(
     required_columns: list[str],
 ) -> DataFrame:
 
-    conditions = []
+    invalid_conditions = [
+        F.col(column).isNull()
+        | (F.trim(F.col(column).cast("string")) == "")
+        for column in required_columns
+    ]
 
-    for column in required_columns:
-        conditions.append(
+    if not invalid_conditions:
+        return (
+            df
+            .withColumn("_quality_status", F.lit("VALID"))
+            .withColumn("_quality_reason", F.lit(None).cast("string"))
+        )
+
+    invalid_condition = invalid_conditions[0]
+
+    for condition in invalid_conditions[1:]:
+        invalid_condition = invalid_condition | condition
+
+    quality_reason = F.lit(None).cast("string")
+
+    for column in reversed(required_columns):
+        condition = (
             F.col(column).isNull()
             | (F.trim(F.col(column).cast("string")) == "")
         )
 
-    invalid_condition = conditions[0]
-
-    for condition in conditions[1:]:
-        invalid_condition = invalid_condition | condition
-
-    quality_reason = None
-
-    for column in required_columns:
-        current_reason = F.when(
-            F.col(column).isNull()
-            | (F.trim(F.col(column).cast("string")) == ""),
+        quality_reason = F.when(
+            condition,
             F.lit(f"{column} is null or empty"),
-        )
-
-        quality_reason = (
-            current_reason
-            if quality_reason is None
-            else quality_reason.otherwise(current_reason)
-        )
+        ).otherwise(quality_reason)
 
     return (
         df
