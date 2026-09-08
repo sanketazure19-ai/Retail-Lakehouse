@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from pyspark import dbutils
 from pyspark.sql import functions as F
 
 from retail_lakehouse.config.settings import (
@@ -25,12 +26,22 @@ from retail_lakehouse.utils.silver import (
 dbutils.widgets.text("environment", "dev")
 dbutils.widgets.text("domain", "erp")
 dbutils.widgets.text("dataset", "customers")
+dbutils.widgets.text("job_id", "")
+dbutils.widgets.text("job_run_id", "")
+dbutils.widgets.text("task_run_id", "")
 
 environment = dbutils.widgets.get("environment")
 domain = dbutils.widgets.get("domain")
 dataset_name = dbutils.widgets.get("dataset")
+job_id = dbutils.widgets.get("job_id")
+job_run_id = dbutils.widgets.get("job.run_id")
+task_run_id = dbutils.widgets.get("task_run_id")
 
-job_context = get_job_context(spark, dbutils)
+job_context = {
+    "job_id": dbutils.widgets.get("job_id"),
+    "run_id": dbutils.widgets.get("job_run_id"),
+    "task_run_id": dbutils.widgets.get("task_run_id"),
+}
 
 task_key = f"silver_{dataset_name}"
 notebook_name = "02_silver_transformation"

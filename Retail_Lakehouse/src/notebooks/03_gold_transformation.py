@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+from pyspark import dbutils
+
 from retail_lakehouse.config.settings import get_environment
 from retail_lakehouse.utils.gold import (
     build_customer_revenue_summary,
@@ -27,10 +29,20 @@ from retail_lakehouse.utils.job_logging import (
 # COMMAND ----------
 
 dbutils.widgets.text("environment", "dev")
+dbutils.widgets.text("job_id", "")
+dbutils.widgets.text("job_run_id", "")
+dbutils.widgets.text("task_run_id", "")
 
 environment = dbutils.widgets.get("environment")
+job_id = dbutils.widgets.get("job_id")
+job_run_id = dbutils.widgets.get("job.run_id")
+task_run_id = dbutils.widgets.get("task_run_id")
 
-job_context = get_job_context(spark,dbutils)
+job_context = {
+    "job_id": dbutils.widgets.get("job_id"),
+    "run_id": dbutils.widgets.get("job_run_id"),
+    "task_run_id": dbutils.widgets.get("task_run_id"),
+}
 
 task_key = "gold_transformation"
 notebook_name = "03_gold_transformation"
