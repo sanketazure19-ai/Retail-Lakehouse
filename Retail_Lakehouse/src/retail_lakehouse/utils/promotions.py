@@ -1,4 +1,4 @@
-from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 
 
 def ingest_promotions(
@@ -9,9 +9,6 @@ def ingest_promotions(
     environment: str,
 ) -> None:
 
-    from retail_lakehouse.utils.metadata import add_ingestion_metadata
-    from retail_lakehouse.utils.quality import add_quality_columns
-
     df = (
         spark.read
         .format("csv")
@@ -20,30 +17,48 @@ def ingest_promotions(
         .load(source_path)
     )
 
-    df = add_ingestion_metadata(
-        df,
-        environment=environment,
-        batch_id="promotions_batch",
-    )
+    print(f"Promotions source row count: {df.count()}")
 
-    df = add_quality_columns(
-        df,
-        required_columns=[
-            "promotion_id",
-            "promotion_name",
-            "product_id",
-            "start_date",
-            "end_date",
-            "discount_percent",
-            "promotion_type",
-            "status",
-        ],
-    )
-
-    valid_df = (
+    df = (
         df
-        .filter("_quality_status = 'VALID'")
-        .drop("_quality_status", "_quality_reason")
+        .withColumn("_ingestion_timestamp", F.current_timestamp())
+        .withColumn("_source_file", F.input_file_name())
+        .withColumn("_load_date", F.current_date())
+        .withColumn("_batch_id", F.lit("promotions_batch"))
+        .withColumn("_environment", F.lit(environment))
+    )
+
+    required_columns = [
+        "promotion_id",
+        "promotion_name",
+        "product_id",
+        "start_date",
+        "end_date",
+        "discount_percent",
+        "promotion_type",
+        "status",
+    ]
+
+    invalid_condition = None
+
+    for column in required_columns:
+        condition = (
+            F.col(column).isNull()
+            | (F.trim(F.col(column).cast("string")) == "")
+        )
+
+        if invalid_condition is None:
+            invalid_condition = condition
+        else:
+            invalid_condition = (
+                invalid_condition | condition
+            )
+
+    valid_df = df.filter(~invalid_condition)
+
+    print(
+        f"Promotions valid row count: "
+        f"{valid_df.count()}"
     )
 
     (
@@ -52,4 +67,8 @@ def ingest_promotions(
         .mode("overwrite")
         .option("overwriteSchema", "true")
         .saveAsTable(target_table)
+    )
+
+    print(
+        f"Promotions written to: {target_table}"
     )
