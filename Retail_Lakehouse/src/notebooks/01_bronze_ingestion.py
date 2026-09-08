@@ -1,6 +1,6 @@
 # Databricks notebook source
 
-from retail_lakehouse.config.schemas import (
+from retail_lakehouse.utils.schemas import (
     CLICKSTREAM_SCHEMA,
     CUSTOMER_SCHEMA,
     ORDER_SCHEMA,
