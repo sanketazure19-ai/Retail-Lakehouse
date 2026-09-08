@@ -11,7 +11,6 @@ from retail_lakehouse.utils.silver import (
     merge_to_silver,
     transform_silver,
 )
-from tests.conftest import spark
 
 
 # COMMAND ----------
