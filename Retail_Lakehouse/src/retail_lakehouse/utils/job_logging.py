@@ -20,12 +20,34 @@ def get_job_context(dbutils) -> dict:
         except Exception:
             return None
 
-    return {
-        "job_id": get_context_value("jobId"),
-        "run_id": get_context_value("currentRunId"),
-        "task_run_id": get_context_value("currentRunId"),
-    }
+    def get_tag_value(name: str) -> str | None:
+        try:
+            tags = context.tags()
+            value = tags.get(name)
+            return value.get() if value.isDefined() else None
+        except Exception:
+            return None
 
+    job_id = (
+        get_tag_value("jobId")
+        or get_context_value("jobId")
+    )
+
+    run_id = (
+        get_tag_value("jobRunId")
+        or get_context_value("currentRunId")
+    )
+
+    task_run_id = (
+        get_tag_value("taskRunId")
+        or get_context_value("currentRunId")
+    )
+
+    return {
+        "job_id": job_id,
+        "run_id": run_id,
+        "task_run_id": task_run_id,
+    }
 
 def log_cell(
     spark,
