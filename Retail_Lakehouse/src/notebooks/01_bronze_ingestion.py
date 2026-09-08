@@ -1,4 +1,13 @@
 # Databricks notebook source
+import inspect
+import retail_lakehouse
+import retail_lakehouse.utils.quality as quality_module
+
+print("=== PACKAGE DIAGNOSTIC ===")
+print(f"retail_lakehouse package: {retail_lakehouse.__file__}")
+print(f"quality module: {quality_module.__file__}")
+print(inspect.getsource(quality_module.add_quality_columns))
+print("=== END PACKAGE DIAGNOSTIC ===")
 
 from datetime import datetime, timezone
 
