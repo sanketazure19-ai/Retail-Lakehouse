@@ -9,6 +9,8 @@ def ingest_promotions(
     environment: str,
 ) -> None:
 
+    # Read CSV without forcing the source schema.
+    # CSV numeric values may arrive as strings such as "15.0".
     df = (
         spark.read
         .format("csv")
@@ -21,6 +23,8 @@ def ingest_promotions(
         f"{df.count()}"
     )
 
+    # Capture Unity Catalog-compatible source metadata
+    # before projecting the business columns.
     df = (
         df
         .withColumn(
@@ -55,7 +59,9 @@ def ingest_promotions(
         )
         .withColumn(
             "discount_percent",
-            F.col("discount_percent").cast("int"),
+            F.col("discount_percent")
+            .cast("double")
+            .cast("int"),
         )
         .withColumn(
             "promotion_type",
