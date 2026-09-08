@@ -12,6 +12,7 @@ def ingest_to_bronze(
     required_columns: list[str],
     environment: str,
     batch_id: str,
+    validation_rules: list | None = None,
 ) -> None:
 
     from retail_lakehouse.utils.metadata import add_ingestion_metadata
@@ -44,6 +45,7 @@ def ingest_to_bronze(
     df = add_quality_columns(
         df,
         required_columns=required_columns,
+        validation_rules=validation_rules,
     )
 
     def process_batch(

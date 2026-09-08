@@ -23,7 +23,6 @@ from retail_lakehouse.utils.schemas import (
     RETURN_SCHEMA,
 )
 
-
 # COMMAND ----------
 
 dbutils.widgets.text("environment", "dev")
@@ -38,7 +37,6 @@ job_context = get_job_context(dbutils)
 
 task_key = f"bronze_{dataset_name}"
 notebook_name = "01_bronze_ingestion"
-
 
 # COMMAND ----------
 
@@ -64,7 +62,6 @@ target_table = f"{catalog}.bronze.{dataset_name}"
 quarantine_table = f"{catalog}.bronze_quarantine.{dataset_name}"
 
 batch_id = generate_batch_id(dataset_name)
-
 
 # COMMAND ----------
 
@@ -119,11 +116,74 @@ required_columns = {
     ],
 }
 
+# COMMAND ----------
+
+validation_rules = {
+    "customers": [
+        {
+            "column": "email",
+            "rule": "regex",
+            "pattern": r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+            "reason": "Invalid email format",
+        },
+    ],
+    "products": [
+        {
+            "column": "unit_price",
+            "rule": "greater_than_or_equal",
+            "value": 0,
+            "reason": "unit_price must be >= 0",
+        },
+    ],
+    "orders": [
+        {
+            "column": "quantity",
+            "rule": "greater_than",
+            "value": 0,
+            "reason": "quantity must be > 0",
+        },
+        {
+            "column": "unit_price",
+            "rule": "greater_than_or_equal",
+            "value": 0,
+            "reason": "unit_price must be >= 0",
+        },
+        {
+            "column": "discount_amount",
+            "rule": "greater_than_or_equal",
+            "value": 0,
+            "reason": "discount_amount must be >= 0",
+        },
+    ],
+    "clickstream": [
+        {
+            "column": "event_type",
+            "rule": "not_empty",
+            "reason": "event_type cannot be empty",
+        },
+    ],
+    "returns": [
+        {
+            "column": "return_quantity",
+            "rule": "greater_than",
+            "value": 0,
+            "reason": "return_quantity must be > 0",
+        },
+        {
+            "column": "refund_amount",
+            "rule": "greater_than_or_equal",
+            "value": 0,
+            "reason": "refund_amount must be >= 0",
+        },
+    ],
+}
+
+# COMMAND ----------
+
 if dataset_name not in schemas:
     raise ValueError(
         f"Unsupported Auto Loader dataset: {dataset_name}"
     )
-
 
 # COMMAND ----------
 
@@ -134,13 +194,11 @@ print(f"RAW path: {raw_path}")
 print(f"Target table: {target_table}")
 print(f"Quarantine table: {quarantine_table}")
 
-
 # COMMAND ----------
 
 cell_start = datetime.now(timezone.utc)
 
 try:
-
     ingest_to_bronze(
         spark=spark,
         source_path=raw_path,
@@ -152,6 +210,7 @@ try:
         required_columns=required_columns[dataset_name],
         environment=environment,
         batch_id=batch_id,
+        validation_rules=validation_rules.get(dataset_name),
     )
 
     cell_end = datetime.now(timezone.utc)
@@ -171,12 +230,9 @@ try:
         dataset=dataset_name,
     )
 
-    print(
-        f"Bronze ingestion completed: {target_table}"
-    )
+    print(f"Bronze ingestion completed: {target_table}")
 
 except Exception as exc:
-
     cell_end = datetime.now(timezone.utc)
 
     try:
@@ -197,8 +253,6 @@ except Exception as exc:
             error_message=str(exc),
         )
     except Exception as log_exc:
-        print(
-            f"Failed to write job log: {log_exc}"
-        )
+        print(f"Failed to write job log: {log_exc}")
 
     raise
