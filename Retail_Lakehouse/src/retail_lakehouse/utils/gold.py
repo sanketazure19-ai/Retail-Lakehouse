@@ -1,5 +1,164 @@
+from delta.tables import DeltaTable
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+
+def build_customer_scd2_source(
+    customers_df: DataFrame,
+) -> DataFrame:
+
+    return (
+        customers_df
+        .select(
+            "customer_id",
+            "first_name",
+            "last_name",
+            "email",
+            "city",
+            "state",
+            "country",
+            "signup_date",
+            "customer_segment",
+        )
+        .withColumn(
+            "effective_start_date",
+            F.current_date(),
+        )
+        .withColumn(
+            "effective_end_date",
+            F.lit("9999-12-31").cast("date"),
+        )
+        .withColumn(
+            "is_current",
+            F.lit(True),
+        )
+    )
+
+
+def merge_customer_scd2(
+    spark,
+    source_df: DataFrame,
+    target_table: str,
+) -> None:
+
+    if not spark.catalog.tableExists(target_table):
+
+        (
+            source_df.write
+            .format("delta")
+            .mode("overwrite")
+            .saveAsTable(target_table)
+        )
+
+        return
+
+    target = DeltaTable.forName(
+        spark,
+        target_table,
+    )
+
+    target_df = spark.table(target_table)
+
+    compare_columns = [
+        "first_name",
+        "last_name",
+        "email",
+        "city",
+        "state",
+        "country",
+        "signup_date",
+        "customer_segment",
+    ]
+
+    change_condition = " OR ".join(
+        [
+            f"""
+            NOT (target.{column} <=> source.{column})
+            """
+            for column in compare_columns
+        ]
+    )
+
+    changed_customers = (
+        source_df.alias("source")
+        .join(
+            target_df.alias("target"),
+            (
+                F.col("source.customer_id")
+                == F.col("target.customer_id")
+            )
+            & F.col("target.is_current"),
+            "inner",
+        )
+        .where(F.expr(change_condition))
+        .select("source.*")
+    )
+
+    if changed_customers.limit(1).count() > 0:
+
+        (
+            target.alias("target")
+            .merge(
+                changed_customers.alias("source"),
+                """
+                target.customer_id = source.customer_id
+                AND target.is_current = true
+                """,
+            )
+            .whenMatchedUpdate(
+                set={
+                    "effective_end_date": "source.effective_start_date",
+                    "is_current": "false",
+                }
+            )
+            .execute()
+        )
+
+    new_customers = (
+        source_df.alias("source")
+        .join(
+            target_df.alias("target"),
+            (
+                F.col("source.customer_id")
+                == F.col("target.customer_id")
+            )
+            & F.col("target.is_current"),
+            "left_anti",
+        )
+    )
+
+    if new_customers.limit(1).count() > 0:
+
+        (
+            new_customers.write
+            .format("delta")
+            .mode("append")
+            .saveAsTable(target_table)
+        )
+
+    changed_customers_to_insert = (
+        changed_customers
+        .withColumn(
+            "effective_start_date",
+            F.current_date(),
+        )
+        .withColumn(
+            "effective_end_date",
+            F.lit("9999-12-31").cast("date"),
+        )
+        .withColumn(
+            "is_current",
+            F.lit(True),
+        )
+    )
+
+    if changed_customers_to_insert.limit(1).count() > 0:
+
+        (
+            changed_customers_to_insert.write
+            .format("delta")
+            .mode("append")
+            .saveAsTable(target_table)
+        )
 
 
 def build_fact_orders(

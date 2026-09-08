@@ -1,14 +1,13 @@
 # Databricks notebook source
 
-from pyspark.sql import functions as F
-
 from retail_lakehouse.config.settings import get_environment
 from retail_lakehouse.utils.gold import (
-    build_dim_customer,
+    build_customer_scd2_source,
     build_dim_date,
     build_dim_product,
     build_fact_orders,
     build_fact_returns,
+    merge_customer_scd2,
 )
 
 
@@ -24,7 +23,7 @@ catalog = env_config["catalog"]
 
 # COMMAND ----------
 
-bronze_silver_tables = {
+silver_tables = {
     "customers": f"{catalog}.silver.customers",
     "products": f"{catalog}.silver.products",
     "orders": f"{catalog}.silver.orders",
@@ -43,25 +42,25 @@ gold_tables = {
 # COMMAND ----------
 
 customers_df = spark.table(
-    bronze_silver_tables["customers"]
+    silver_tables["customers"]
 )
 
 products_df = spark.table(
-    bronze_silver_tables["products"]
+    silver_tables["products"]
 )
 
 orders_df = spark.table(
-    bronze_silver_tables["orders"]
+    silver_tables["orders"]
 )
 
 returns_df = spark.table(
-    bronze_silver_tables["returns"]
+    silver_tables["returns"]
 )
 
 
 # COMMAND ----------
 
-dim_customer_df = build_dim_customer(
+customer_scd2_df = build_customer_scd2_source(
     customers_df
 )
 
@@ -89,13 +88,14 @@ date_df = build_dim_date(
 
 # COMMAND ----------
 
-(
-    dim_customer_df.write
-    .format("delta")
-    .mode("overwrite")
-    .option("overwriteSchema", "true")
-    .saveAsTable(gold_tables["dim_customer"])
+merge_customer_scd2(
+    spark=spark,
+    source_df=customer_scd2_df,
+    target_table=gold_tables["dim_customer"],
 )
+
+
+# COMMAND ----------
 
 (
     dim_product_df.write
