@@ -22,7 +22,7 @@ def ingest_promotions(
     df = (
         df
         .withColumn("_ingestion_timestamp", F.current_timestamp())
-        .withColumn("_source_file", F.input_file_name())
+        .withColumn("_source_file", F.col("_metadata.file_path"))
         .withColumn("_load_date", F.current_date())
         .withColumn("_batch_id", F.lit("promotions_batch"))
         .withColumn("_environment", F.lit(environment))
