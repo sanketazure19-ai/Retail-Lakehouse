@@ -1,7 +1,13 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
-from pyspark.sql import functions as F
+from pyspark.sql.types import (
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 
 def get_job_context(dbutils) -> dict:
@@ -61,31 +67,42 @@ def log_cell(
         rows_processed,
         error_type,
         error_message,
-        datetime.now(timezone.utc),
+        datetime.now(start_time.tzinfo),
     )]
 
-    columns = [
-        "log_id",
-        "environment",
-        "job_id",
-        "run_id",
-        "task_run_id",
-        "task_key",
-        "notebook_name",
-        "cell_name",
-        "domain",
-        "dataset",
-        "status",
-        "start_time",
-        "end_time",
-        "duration_ms",
-        "rows_processed",
-        "error_type",
-        "error_message",
-        "created_at",
-    ]
+    schema = StructType([
+        StructField("log_id", StringType(), False),
+        StructField("environment", StringType(), True),
 
-    log_df = spark.createDataFrame(row, columns)
+        StructField("job_id", StringType(), True),
+        StructField("run_id", StringType(), True),
+        StructField("task_run_id", StringType(), True),
+        StructField("task_key", StringType(), True),
+
+        StructField("notebook_name", StringType(), True),
+        StructField("cell_name", StringType(), True),
+
+        StructField("domain", StringType(), True),
+        StructField("dataset", StringType(), True),
+
+        StructField("status", StringType(), True),
+
+        StructField("start_time", TimestampType(), True),
+        StructField("end_time", TimestampType(), True),
+        StructField("duration_ms", LongType(), True),
+
+        StructField("rows_processed", LongType(), True),
+
+        StructField("error_type", StringType(), True),
+        StructField("error_message", StringType(), True),
+
+        StructField("created_at", TimestampType(), True),
+    ])
+
+    log_df = spark.createDataFrame(
+        row,
+        schema=schema,
+    )
 
     (
         log_df.write
