@@ -2,12 +2,16 @@
 
 from retail_lakehouse.config.settings import get_environment
 from retail_lakehouse.utils.gold import (
+    build_customer_revenue_summary,
     build_customer_sales_summary,
     build_customer_scd2_source,
     build_dim_date,
     build_dim_product,
     build_fact_orders,
     build_fact_returns,
+    build_monthly_sales_summary,
+    build_daily_sales_summary,
+    build_product_revenue_summary,
     build_product_sales_summary,
     merge_customer_scd2,
 )
@@ -40,6 +44,10 @@ gold_tables = {
     "dim_date": f"{catalog}.gold.dim_date",
     "customer_sales_summary": f"{catalog}.gold.customer_sales_summary",
     "product_sales_summary": f"{catalog}.gold.product_sales_summary",
+    "daily_sales_summary": f"{catalog}.gold.daily_sales_summary",
+    "monthly_sales_summary": f"{catalog}.gold.monthly_sales_summary",
+    "customer_revenue_summary": f"{catalog}.gold.customer_revenue_summary",
+    "product_revenue_summary": f"{catalog}.gold.product_revenue_summary",
 }
 
 
@@ -86,6 +94,26 @@ customer_sales_summary_df = build_customer_sales_summary(
 
 product_sales_summary_df = build_product_sales_summary(
     fact_orders_df
+)
+
+daily_sales_summary_df = build_daily_sales_summary(
+    fact_orders_df,
+    fact_returns_df,
+)
+
+monthly_sales_summary_df = build_monthly_sales_summary(
+    fact_orders_df,
+    fact_returns_df,
+)
+
+customer_revenue_summary_df = build_customer_revenue_summary(
+    fact_orders_df,
+    fact_returns_df,
+)
+
+product_revenue_summary_df = build_product_revenue_summary(
+    fact_orders_df,
+    fact_returns_df,
 )
 
 
@@ -140,6 +168,38 @@ merge_customer_scd2(
     .saveAsTable(gold_tables["product_sales_summary"])
 )
 
+(
+    daily_sales_summary_df.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(gold_tables["daily_sales_summary"])
+)
+
+(
+    monthly_sales_summary_df.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(gold_tables["monthly_sales_summary"])
+)
+
+(
+    customer_revenue_summary_df.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(gold_tables["customer_revenue_summary"])
+)
+
+(
+    product_revenue_summary_df.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(gold_tables["product_revenue_summary"])
+)
+
 
 # COMMAND ----------
 
@@ -173,4 +233,23 @@ print(
 print(
     f"Product sales summary: "
     f"{gold_tables['product_sales_summary']}"
+)
+print(
+    f"Daily sales summary: "
+    f"{gold_tables['daily_sales_summary']}"
+)
+
+print(
+    f"Monthly sales summary: "
+    f"{gold_tables['monthly_sales_summary']}"
+)
+
+print(
+    f"Customer revenue summary: "
+    f"{gold_tables['customer_revenue_summary']}"
+)
+
+print(
+    f"Product revenue summary: "
+    f"{gold_tables['product_revenue_summary']}"
 )

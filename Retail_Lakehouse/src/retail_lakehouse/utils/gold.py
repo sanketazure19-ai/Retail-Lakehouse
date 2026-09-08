@@ -323,3 +323,208 @@ def build_product_sales_summary(
             F.sum("net_sales_amount").alias("net_sales_amount"),
         )
     )
+
+def build_return_summary(
+    returns_df: DataFrame,
+) -> DataFrame:
+    return (
+        returns_df
+        .groupBy("order_id")
+        .agg(
+            F.sum("refund_amount").alias("refund_amount"),
+            F.sum("return_quantity").alias("returned_units"),
+        )
+    )
+
+
+def build_daily_sales_summary(
+    orders_df: DataFrame,
+    returns_df: DataFrame,
+) -> DataFrame:
+
+    return_summary = build_return_summary(
+        returns_df
+    )
+
+    return (
+        orders_df
+        .join(
+            return_summary,
+            on="order_id",
+            how="left",
+        )
+        .withColumn(
+            "refund_amount",
+            F.coalesce(
+                F.col("refund_amount"),
+                F.lit(0.0),
+            ),
+        )
+        .groupBy("order_date")
+        .agg(
+            F.countDistinct("order_id").alias("order_count"),
+            F.sum("quantity").alias("units_sold"),
+            F.sum("gross_amount").alias("gross_sales_amount"),
+            F.sum("discount_amount").alias("discount_amount"),
+            F.sum("net_sales_amount").alias("net_sales_amount"),
+            F.sum("refund_amount").alias("refund_amount"),
+        )
+        .withColumn(
+            "net_revenue",
+            F.col("net_sales_amount")
+            - F.col("refund_amount"),
+        )
+    )
+
+
+def build_monthly_sales_summary(
+    orders_df: DataFrame,
+    returns_df: DataFrame,
+) -> DataFrame:
+
+    daily_df = build_daily_sales_summary(
+        orders_df,
+        returns_df,
+    )
+
+    return (
+        daily_df
+        .withColumn(
+            "year",
+            F.year("order_date"),
+        )
+        .withColumn(
+            "month",
+            F.month("order_date"),
+        )
+        .groupBy(
+            "year",
+            "month",
+        )
+        .agg(
+            F.sum("order_count").alias("order_count"),
+            F.sum("units_sold").alias("units_sold"),
+            F.sum("gross_sales_amount").alias(
+                "gross_sales_amount"
+            ),
+            F.sum("discount_amount").alias(
+                "discount_amount"
+            ),
+            F.sum("net_sales_amount").alias(
+                "net_sales_amount"
+            ),
+            F.sum("refund_amount").alias(
+                "refund_amount"
+            ),
+            F.sum("net_revenue").alias(
+                "net_revenue"
+            ),
+        )
+    )
+
+
+def build_customer_revenue_summary(
+    orders_df: DataFrame,
+    returns_df: DataFrame,
+) -> DataFrame:
+
+    return_summary = build_return_summary(
+        returns_df
+    )
+
+    return (
+        orders_df
+        .join(
+            return_summary,
+            on="order_id",
+            how="left",
+        )
+        .withColumn(
+            "refund_amount",
+            F.coalesce(
+                F.col("refund_amount"),
+                F.lit(0.0),
+            ),
+        )
+        .groupBy("customer_id")
+        .agg(
+            F.countDistinct("order_id").alias("order_count"),
+            F.sum("quantity").alias("units_sold"),
+            F.sum("gross_amount").alias(
+                "gross_sales_amount"
+            ),
+            F.sum("discount_amount").alias(
+                "discount_amount"
+            ),
+            F.sum("net_sales_amount").alias(
+                "net_sales_amount"
+            ),
+            F.sum("refund_amount").alias(
+                "refund_amount"
+            ),
+        )
+        .withColumn(
+            "net_revenue",
+            F.col("net_sales_amount")
+            - F.col("refund_amount"),
+        )
+    )
+
+
+def build_product_revenue_summary(
+    orders_df: DataFrame,
+    returns_df: DataFrame,
+) -> DataFrame:
+
+    return_summary = (
+        returns_df
+        .groupBy("order_id", "product_id")
+        .agg(
+            F.sum("refund_amount").alias(
+                "refund_amount"
+            ),
+            F.sum("return_quantity").alias(
+                "returned_units"
+            ),
+        )
+    )
+
+    return (
+        orders_df
+        .join(
+            return_summary,
+            on=["order_id", "product_id"],
+            how="left",
+        )
+        .withColumn(
+            "refund_amount",
+            F.coalesce(
+                F.col("refund_amount"),
+                F.lit(0.0),
+            ),
+        )
+        .groupBy("product_id")
+        .agg(
+            F.countDistinct("order_id").alias(
+                "order_count"
+            ),
+            F.sum("quantity").alias("units_sold"),
+            F.sum("gross_amount").alias(
+                "gross_sales_amount"
+            ),
+            F.sum("discount_amount").alias(
+                "discount_amount"
+            ),
+            F.sum("net_sales_amount").alias(
+                "net_sales_amount"
+            ),
+            F.sum("refund_amount").alias(
+                "refund_amount"
+            ),
+        )
+        .withColumn(
+            "net_revenue",
+            F.col("net_sales_amount")
+            - F.col("refund_amount"),
+        )
+    )
