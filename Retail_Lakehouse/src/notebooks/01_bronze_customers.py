@@ -129,9 +129,11 @@ quarantine_table = f"{catalog}.bronze_quarantine.customers"
 
 def process_batch(batch_df, batch_id):
 
-    valid_df = batch_df.filter(
-        F.col("_quality_status") == "VALID"
-    )
+    valid_df = (
+        batch_df
+        .filter(F.col("_quality_status") == "VALID")
+        .drop("_quality_status", "_quality_reason")
+)
 
     quarantine_df = batch_df.filter(
         F.col("_quality_status") == "QUARANTINE"
