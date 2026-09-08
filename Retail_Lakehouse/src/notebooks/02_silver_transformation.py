@@ -1,4 +1,5 @@
 # Databricks notebook source
+
 from pyspark.sql import functions as F
 
 from retail_lakehouse.config.settings import (
@@ -12,7 +13,6 @@ from retail_lakehouse.utils.silver import (
     transform_silver,
 )
 
-
 # COMMAND ----------
 
 dbutils.widgets.text("environment", "dev")
@@ -23,25 +23,17 @@ environment = dbutils.widgets.get("environment")
 domain = dbutils.widgets.get("domain")
 dataset_name = dbutils.widgets.get("dataset")
 
-
 # COMMAND ----------
 
 env_config = get_environment(environment)
 datasets = get_datasets()
 
 catalog = env_config["catalog"]
-
 dataset_config = datasets[domain][dataset_name]
-
-if dataset_config["ingestion"] != "autoloader":
-    raise ValueError(
-        f"Unsupported Silver dataset: {dataset_name}"
-    )
 
 source_table = f"{catalog}.bronze.{dataset_name}"
 target_table = f"{catalog}.silver.{dataset_name}"
 control_table = f"{catalog}.silver.processed_batches"
-
 
 # COMMAND ----------
 
@@ -51,6 +43,7 @@ key_columns = {
     "orders": ["order_id"],
     "clickstream": ["event_id"],
     "returns": ["return_id"],
+    "promotions": ["promotion_id"],
 }
 
 if dataset_name not in key_columns:
@@ -58,16 +51,15 @@ if dataset_name not in key_columns:
         f"Unsupported Silver dataset: {dataset_name}"
     )
 
-
 # COMMAND ----------
 
 print(f"Environment: {environment}")
 print(f"Domain: {domain}")
 print(f"Dataset: {dataset_name}")
+print(f"Ingestion type: {dataset_config['ingestion']}")
 print(f"Source table: {source_table}")
 print(f"Target table: {target_table}")
 print(f"Control table: {control_table}")
-
 
 # COMMAND ----------
 
@@ -78,22 +70,30 @@ unprocessed_batches = get_unprocessed_batches(
     dataset_name=dataset_name,
 )
 
-print(f"Unprocessed batches: {len(unprocessed_batches)}")
-
-if not unprocessed_batches:
-    print("No new Bronze batches to process.")
-
+print(
+    f"Unprocessed batches: "
+    f"{len(unprocessed_batches)}"
+)
 
 # COMMAND ----------
 
-if unprocessed_batches:
+if not unprocessed_batches:
 
-    bronze_df =  (
-    spark.table(source_table)
-    .filter(
-        F.col("_batch_id").isin(unprocessed_batches)
+    print(
+        f"No new Bronze batches to process "
+        f"for {dataset_name}."
     )
-)
+
+else:
+
+    bronze_df = (
+        spark.table(source_table)
+        .filter(
+            F.col("_batch_id").isin(
+                unprocessed_batches
+            )
+        )
+    )
 
     silver_df = transform_silver(
         df=bronze_df,
@@ -116,6 +116,6 @@ if unprocessed_batches:
     )
 
     print(
-        f"Processed {len(unprocessed_batches)} batch(es) "
-        f"into {target_table}"
+        f"Processed {len(unprocessed_batches)} "
+        f"batch(es) into {target_table}"
     )

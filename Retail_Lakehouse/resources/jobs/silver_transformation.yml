@@ -56,3 +56,11 @@ resources:
               domain: ecommerce
               dataset: returns
           environment_key: default
+        - task_key: silver_promotions
+          notebook_task:
+            notebook_path: ../../src/notebooks/02_silver_transformation.py
+            base_parameters:
+              environment: ${bundle.target}
+              domain: marketing
+              dataset: promotions
+          environment_key: default
