@@ -1,9 +1,15 @@
 # Databricks notebook source
+
 # /// script
+#
 # [tool.databricks.environment]
+#
 # environment_version = "5"
+#
 # ///
+
 import inspect
+
 import retail_lakehouse
 import retail_lakehouse.utils.quality as quality_module
 
@@ -24,10 +30,7 @@ from retail_lakehouse.utils.helpers import (
     build_raw_path,
     generate_batch_id,
 )
-from retail_lakehouse.utils.job_logging import (
-    get_job_context,
-    log_cell,
-)
+from retail_lakehouse.utils.job_logging import log_cell
 from retail_lakehouse.utils.schemas import (
     CLICKSTREAM_SCHEMA,
     CUSTOMER_SCHEMA,
@@ -74,6 +77,7 @@ checkpoint_root = env_config["checkpoint_root"]
 schema_root = env_config["schema_root"]
 
 dataset_config = datasets[domain][dataset_name]
+
 dq_failure_threshold_percent = float(
     dataset_config.get(
         "dq_failure_threshold_percent",
