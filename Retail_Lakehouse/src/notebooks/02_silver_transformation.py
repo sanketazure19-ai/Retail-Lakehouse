@@ -22,6 +22,7 @@ from retail_lakehouse.utils.silver import (
 )
 from retail_lakehouse.utils.validation import validate_not_empty
 
+# COMMAND ----------
 
 dbutils.widgets.text("environment", "")
 dbutils.widgets.text("domain", "")
@@ -30,14 +31,20 @@ dbutils.widgets.text("job_id", "")
 dbutils.widgets.text("job_run_id", "")
 dbutils.widgets.text("task_run_id", "")
 
+# COMMAND ----------
+
 environment = dbutils.widgets.get("environment")
 domain = dbutils.widgets.get("domain")
 dataset_name = dbutils.widgets.get("dataset")
 
+# COMMAND ----------
+
 catalog = load_config("environments.yml")["environments"][environment]["catalog"]
+
 datasets_config = load_config("datasets.yml")["datasets"]
 
 dataset_config = datasets_config[domain][dataset_name]
+
 silver_config = dataset_config["silver"]
 
 required_columns = silver_config.get(
@@ -55,6 +62,8 @@ dq_failure_threshold_percent = silver_config.get(
     1.0,
 )
 
+# COMMAND ----------
+
 source_table = (
     f"{catalog}.bronze.{dataset_name}"
 )
@@ -70,6 +79,8 @@ quarantine_table = (
 control_table = (
     f"{catalog}.silver.processed_batches"
 )
+
+# COMMAND ----------
 
 key_columns = {
     "customers": ["customer_id"],
@@ -87,6 +98,8 @@ if dataset_name not in key_columns:
 
 business_keys = key_columns[dataset_name]
 
+# COMMAND ----------
+
 job_context = get_job_context(
     spark,
     dbutils,
@@ -96,6 +109,7 @@ task_key = dataset_name
 
 notebook_name = "02_silver_transformation"
 
+# COMMAND ----------
 
 print(f"Environment: {environment}")
 print(f"Domain: {domain}")
@@ -106,11 +120,13 @@ print(f"Quarantine: {quarantine_table}")
 print(f"Business keys: {business_keys}")
 print(f"Required columns: {required_columns}")
 print(f"Validation rules: {validation_rules}")
+
 print(
     "DQ alert threshold: "
     f"{dq_failure_threshold_percent}%"
 )
 
+# COMMAND ----------
 
 unprocessed_batches = get_unprocessed_batches(
     spark=spark,
@@ -123,6 +139,7 @@ print(
     f"Unprocessed batches: {unprocessed_batches}"
 )
 
+# COMMAND ----------
 
 if not unprocessed_batches:
     print(
@@ -285,6 +302,3 @@ else:
             )
 
             raise
-
-# COMMAND ----------
-
