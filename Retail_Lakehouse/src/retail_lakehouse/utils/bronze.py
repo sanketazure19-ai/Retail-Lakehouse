@@ -13,8 +13,15 @@ def ingest_to_bronze(
     environment: str,
     batch_id: str,
     validation_rules: list | None = None,
+    catalog: str | None = None,
+    dataset_name: str | None = None,
+    dq_failure_threshold_percent: float = 10.0,
 ) -> None:
 
+    from retail_lakehouse.utils.dq_metrics import (
+        calculate_dq_metrics,
+        write_dq_metrics,
+    )
     from retail_lakehouse.utils.metadata import add_ingestion_metadata
     from retail_lakehouse.utils.quality import add_quality_columns
 
@@ -53,29 +60,73 @@ def ingest_to_bronze(
         micro_batch_id: int,
     ) -> None:
 
-        valid_df = (
-            batch_df
-            .filter("_quality_status = 'VALID'")
-            .drop("_quality_status", "_quality_reason")
-        )
+        batch_df.cache()
 
-        quarantine_df = batch_df.filter(
-            "_quality_status = 'QUARANTINE'"
-        )
+        try:
+            metrics = calculate_dq_metrics(
+                        batch_df=batch_df,
+                        environment=environment,
+                        dataset=dataset_name or "unknown",
+                        batch_id=batch_id,
+                        micro_batch_id=micro_batch_id,
+                        threshold_percent=dq_failure_threshold_percent,
+            )
 
-        (
-            valid_df.write
-            .format("delta")
-            .mode("append")
-            .saveAsTable(target_table)
-        )
+            print(
+                "DQ metrics: "
+                f"dataset={metrics['dataset']}, "
+                f"micro_batch_id={metrics['micro_batch_id']}, "
+                f"total={metrics['total_records']}, "
+                f"valid={metrics['valid_records']}, "
+                f"quarantined={metrics['quarantined_records']}, "
+                f"failure_rate={metrics['dq_failure_rate_percent']:.2f}%, "
+                f"threshold={metrics['dq_failure_threshold_percent']:.2f}%, "
+                f"status={metrics['dq_status']}"
+            )
 
-        (
-            quarantine_df.write
-            .format("delta")
-            .mode("append")
-            .saveAsTable(quarantine_table)
-        )
+            if catalog:
+                write_dq_metrics(
+                    spark=spark,
+                    catalog=catalog,
+                    metrics=metrics,
+                )
+
+            if metrics["dq_status"] == "FAIL":
+                raise ValueError(
+                    "DQ circuit breaker triggered for "
+                    f"dataset '{dataset_name}'. "
+                    f"Failure rate "
+                    f"{metrics['dq_failure_rate_percent']:.2f}% "
+                    f"exceeded threshold "
+                    f"{metrics['dq_failure_threshold_percent']:.2f}%."
+                )
+
+            valid_df = (
+                batch_df
+                .filter("_quality_status = 'VALID'")
+                .drop("_quality_status", "_quality_reason")
+            )
+
+            quarantine_df = batch_df.filter(
+                "_quality_status = 'QUARANTINE'"
+            )
+
+            (
+                valid_df.write
+                .format("delta")
+                .mode("append")
+                .saveAsTable(target_table)
+            )
+
+            (
+                quarantine_df.write
+                .format("delta")
+                .mode("append")
+                .saveAsTable(quarantine_table)
+            )
+
+        finally:
+            batch_df.unpersist()
 
     query = (
         df.writeStream

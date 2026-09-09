@@ -70,6 +70,12 @@ checkpoint_root = env_config["checkpoint_root"]
 schema_root = env_config["schema_root"]
 
 dataset_config = datasets[domain][dataset_name]
+dq_failure_threshold_percent = float(
+    dataset_config.get(
+        "dq_failure_threshold_percent",
+        10,
+    )
+)
 
 raw_path = build_raw_path(
     raw_root,
@@ -214,6 +220,10 @@ print(f"Dataset: {dataset_name}")
 print(f"RAW path: {raw_path}")
 print(f"Target table: {target_table}")
 print(f"Quarantine table: {quarantine_table}")
+print(
+    f"DQ failure threshold: "
+    f"{dq_failure_threshold_percent:.2f}%"
+)
 
 # COMMAND ----------
 
@@ -232,6 +242,9 @@ try:
         environment=environment,
         batch_id=batch_id,
         validation_rules=validation_rules.get(dataset_name),
+        catalog=catalog,
+        dataset_name=dataset_name,
+        dq_failure_threshold_percent=dq_failure_threshold_percent,
     )
 
     cell_end = datetime.now(timezone.utc)
