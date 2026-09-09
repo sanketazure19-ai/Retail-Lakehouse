@@ -1,3 +1,5 @@
+# Databricks notebook source
+
 from pyspark.sql import functions as F
 
 from retail_lakehouse.utils.config import load_config
@@ -283,3 +285,6 @@ else:
             )
 
             raise
+
+# COMMAND ----------
+
