@@ -135,7 +135,6 @@ try:
         ingestion_alert_threshold_percent=ingestion_alert_threshold_percent,
     )
 
-    cell_end = datetime.now(timezone.utc)
 
     log_cell(
         spark=spark,
@@ -146,7 +145,6 @@ try:
         notebook_name=notebook_name,
         cell_name="bronze_ingestion",
         status="SUCCESS",
-        end_time=cell_end,
         domain=domain,
         dataset=dataset_name,
     )
@@ -154,7 +152,6 @@ try:
     print(f"Bronze ingestion completed: {target_table}")
 
 except Exception as exc:
-    cell_end = datetime.now(timezone.utc)
 
     try:
         log_cell(
@@ -166,7 +163,6 @@ except Exception as exc:
             notebook_name=notebook_name,
             cell_name="bronze_ingestion",
             status="FAILED",
-            end_time=cell_end,
             domain=domain,
             dataset=dataset_name,
             error_type=type(exc).__name__,
