@@ -1,4 +1,5 @@
 from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 
 
 def ingest_to_bronze(
@@ -12,12 +13,11 @@ def ingest_to_bronze(
     required_columns: list[str],
     environment: str,
     batch_id: str,
-    validation_rules: list | None = None,
+    validation_rules: list[dict] | None = None,
     catalog: str | None = None,
     dataset_name: str | None = None,
     dq_failure_threshold_percent: float = 10.0,
 ) -> None:
-
     from retail_lakehouse.utils.dq_metrics import (
         calculate_dq_metrics,
         write_dq_metrics,
@@ -35,14 +35,6 @@ def ingest_to_bronze(
         .load(source_path)
     )
 
-    actual_columns = set(df.columns)
-    missing_columns = set(required_columns) - actual_columns
-
-    if missing_columns:
-        raise ValueError(
-            f"Missing required columns: {sorted(missing_columns)}"
-        )
-
     df = add_ingestion_metadata(
         df,
         environment=environment,
@@ -59,11 +51,12 @@ def ingest_to_bronze(
         batch_df: DataFrame,
         micro_batch_id: int,
     ) -> None:
+        dataset = dataset_name or target_table
 
         metrics = calculate_dq_metrics(
             batch_df=batch_df,
             environment=environment,
-            dataset=dataset_name or "unknown",
+            dataset=dataset,
             batch_id=batch_id,
             micro_batch_id=micro_batch_id,
             threshold_percent=dq_failure_threshold_percent,
@@ -71,8 +64,6 @@ def ingest_to_bronze(
 
         print(
             "DQ metrics: "
-            f"dataset={metrics['dataset']}, "
-            f"micro_batch_id={metrics['micro_batch_id']}, "
             f"total={metrics['total_records']}, "
             f"valid={metrics['valid_records']}, "
             f"quarantined={metrics['quarantined_records']}, "
@@ -83,6 +74,8 @@ def ingest_to_bronze(
             f"status={metrics['dq_status']}"
         )
 
+        # Always persist DQ metrics before deciding whether
+        # the batch can enter Bronze.
         if catalog:
             write_dq_metrics(
                 spark=spark,
@@ -90,40 +83,77 @@ def ingest_to_bronze(
                 metrics=metrics,
             )
 
+        # ------------------------------------------------------------------
+        # DQ FAIL
+        #
+        # Preserve the complete failed micro-batch in quarantine.
+        # Bronze remains untouched.
+        #
+        # We intentionally return instead of raising an exception so that
+        # Auto Loader can commit the checkpoint and continue processing
+        # subsequent files.
+        # ------------------------------------------------------------------
         if metrics["dq_status"] == "FAIL":
-            raise ValueError(
-                "DQ circuit breaker triggered for "
-                f"dataset '{dataset_name}'. "
-                f"Failure rate "
-                f"{metrics['dq_failure_rate_percent']:.2f}% "
-                f"exceeded threshold "
-                f"{metrics['dq_failure_threshold_percent']:.2f}%."
+            failed_batch_df = (
+                batch_df
+                .withColumn(
+                    "_quarantine_reason",
+                    F.lit(
+                        "DQ circuit breaker failure: "
+                        f"{metrics['dq_failure_rate_percent']:.2f}% "
+                        "failure rate exceeded "
+                        f"{dq_failure_threshold_percent:.2f}% threshold"
+                    ),
+                )
+                .withColumn(
+                    "_quarantine_timestamp",
+                    F.current_timestamp(),
+                )
+                .withColumn(
+                    "_quarantine_batch_id",
+                    F.lit(batch_id),
+                )
             )
 
+            failed_batch_df.write.format("delta").mode("append").saveAsTable(
+                quarantine_table
+            )
+
+            print(
+                f"DQ circuit breaker triggered for dataset '{dataset}'. "
+                f"Batch quarantined and Bronze write blocked. "
+                f"Failure rate="
+                f"{metrics['dq_failure_rate_percent']:.2f}%, "
+                f"threshold={dq_failure_threshold_percent:.2f}%."
+            )
+
+            return
+
+        # ------------------------------------------------------------------
+        # DQ PASS
+        #
+        # Valid records enter Bronze.
+        # Invalid records are retained in the normal quarantine table.
+        # ------------------------------------------------------------------
         valid_df = (
             batch_df
             .filter("_quality_status = 'VALID'")
             .drop("_quality_status", "_quality_reason")
         )
 
-        quarantine_df = (
-            batch_df
-            .filter("_quality_status = 'QUARANTINE'")
+        quarantine_df = batch_df.filter(
+            "_quality_status = 'QUARANTINE'"
         )
 
-        (
-            valid_df.write
-            .format("delta")
-            .mode("append")
-            .saveAsTable(target_table)
-        )
+        if valid_df.limit(1).count() > 0:
+            valid_df.write.format("delta").mode("append").saveAsTable(
+                target_table
+            )
 
-        (
-            quarantine_df.write
-            .format("delta")
-            .mode("append")
-            .saveAsTable(quarantine_table)
-        )
+        if quarantine_df.limit(1).count() > 0:
+            quarantine_df.write.format("delta").mode("append").saveAsTable(
+                quarantine_table
+            )
 
     query = (
         df.writeStream
