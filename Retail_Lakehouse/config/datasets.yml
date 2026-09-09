@@ -8,17 +8,66 @@ datasets:
       ingestion: autoloader
       ingestion_alert_threshold_percent: 1
 
+      silver:
+        dq_alert_threshold_percent: 1
+        required_columns:
+          - customer_id
+          - email
+          - signup_date
+          - customer_segment
+        validation_rules:
+          - column: email
+            rule: regex
+            pattern: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+            reason: "Invalid email format"
+
     products:
       path: erp/products
       format: csv
       ingestion: autoloader
       ingestion_alert_threshold_percent: 1
 
+      silver:
+        dq_alert_threshold_percent: 1
+        required_columns:
+          - product_id
+          - product_name
+          - unit_price
+          - currency
+        validation_rules:
+          - column: unit_price
+            rule: greater_than
+            value: 0
+            reason: "unit_price must be greater than 0"
+
     orders:
       path: erp/orders
       format: csv
       ingestion: autoloader
       ingestion_alert_threshold_percent: 1
+
+      silver:
+        dq_alert_threshold_percent: 1
+        required_columns:
+          - order_id
+          - customer_id
+          - product_id
+          - order_date
+          - quantity
+          - unit_price
+        validation_rules:
+          - column: quantity
+            rule: greater_than
+            value: 0
+            reason: "quantity must be greater than 0"
+          - column: unit_price
+            rule: greater_than
+            value: 0
+            reason: "unit_price must be greater than 0"
+          - column: discount_amount
+            rule: greater_than_or_equal
+            value: 0
+            reason: "discount_amount must be greater than or equal to 0"
 
   ecommerce:
 
@@ -28,11 +77,40 @@ datasets:
       ingestion: autoloader
       ingestion_alert_threshold_percent: 1
 
+      silver:
+        dq_alert_threshold_percent: 1
+        required_columns:
+          - event_id
+          - event_timestamp
+          - event_type
+          - session_id
+        validation_rules: []
+
     returns:
       path: ecommerce/returns
       format: csv
       ingestion: autoloader
       ingestion_alert_threshold_percent: 1
+
+      silver:
+        dq_alert_threshold_percent: 1
+        required_columns:
+          - return_id
+          - order_id
+          - customer_id
+          - product_id
+          - return_date
+          - return_quantity
+          - refund_amount
+        validation_rules:
+          - column: return_quantity
+            rule: greater_than
+            value: 0
+            reason: "return_quantity must be greater than 0"
+          - column: refund_amount
+            rule: greater_than_or_equal
+            value: 0
+            reason: "refund_amount must be greater than or equal to 0"
 
   marketing:
 
@@ -41,3 +119,26 @@ datasets:
       format: csv
       ingestion: batch
       ingestion_alert_threshold_percent: 1
+
+      silver:
+        dq_alert_threshold_percent: 1
+        required_columns:
+          - promotion_id
+          - promotion_name
+          - product_id
+          - start_date
+          - end_date
+          - discount_percent
+        validation_rules:
+          - column: discount_percent
+            rule: greater_than_or_equal
+            value: 0
+            reason: "discount_percent must be greater than or equal to 0"
+          - column: discount_percent
+            rule: less_than_or_equal
+            value: 100
+            reason: "discount_percent must be less than or equal to 100"
+          - column: end_date
+            rule: column_greater_than_or_equal
+            compare_to: start_date
+            reason: "end_date must be greater than or equal to start_date"

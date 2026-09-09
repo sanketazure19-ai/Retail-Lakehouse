@@ -17,15 +17,13 @@ def deduplicate(
     df: DataFrame,
     key_columns: list[str],
 ) -> DataFrame:
-
     window = Window.partitionBy(*key_columns).orderBy(
         F.col("_ingestion_timestamp").desc(),
         F.col("_batch_id").desc(),
     )
 
     return (
-        df
-        .withColumn("_row_number", F.row_number().over(window))
+        df.withColumn("_row_number", F.row_number().over(window))
         .filter(F.col("_row_number") == 1)
         .drop("_row_number")
     )
@@ -35,11 +33,15 @@ def add_silver_metadata(
     df: DataFrame,
     environment: str,
 ) -> DataFrame:
-
     return (
-        df
-        .withColumn("_silver_timestamp", F.current_timestamp())
-        .withColumn("_silver_environment", F.lit(environment))
+        df.withColumn(
+            "_silver_timestamp",
+            F.current_timestamp(),
+        )
+        .withColumn(
+            "_silver_environment",
+            F.lit(environment),
+        )
     )
 
 
@@ -73,8 +75,7 @@ def get_unprocessed_batches(
     return [
         row["_batch_id"]
         for row in (
-            source_batches
-            .join(
+            source_batches.join(
                 processed_batches,
                 on="_batch_id",
                 how="left_anti",
@@ -91,15 +92,16 @@ def merge_to_silver(
     key_columns: list[str],
 ) -> None:
 
-    if not spark.catalog.tableExists(target_table):
+    if not df.take(1):
+        return
 
+    if not spark.catalog.tableExists(target_table):
         (
             df.write
             .format("delta")
             .mode("overwrite")
             .saveAsTable(target_table)
         )
-
         return
 
     target = DeltaTable.forName(
@@ -109,7 +111,7 @@ def merge_to_silver(
 
     merge_condition = " AND ".join(
         [
-            f"target.{column} = source.{column}"
+            f"target.`{column}` = source.`{column}`"
             for column in key_columns
         ]
     )
@@ -126,6 +128,51 @@ def merge_to_silver(
     )
 
 
+def write_quarantine(
+    spark,
+    df: DataFrame,
+    quarantine_table: str,
+) -> None:
+
+    if not df.take(1):
+        return
+
+    (
+        df.withColumn(
+            "_quarantine_timestamp",
+            F.current_timestamp(),
+        )
+        .write
+        .format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable(quarantine_table)
+    )
+
+
+def ensure_processed_batches_table(
+    spark,
+    control_table: str,
+) -> None:
+
+    if spark.catalog.tableExists(control_table):
+        return
+
+    schema = """
+        dataset STRING,
+        _batch_id STRING,
+        _processed_timestamp TIMESTAMP
+    """
+
+    (
+        spark.createDataFrame([], schema)
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .saveAsTable(control_table)
+    )
+
+
 def mark_batches_processed(
     spark,
     control_table: str,
@@ -133,30 +180,44 @@ def mark_batches_processed(
     batch_ids: list[str],
 ) -> None:
 
-    rows = [
-        (
-            dataset_name,
-            batch_id,
-        )
-        for batch_id in batch_ids
-    ]
+    if not batch_ids:
+        return
 
-    control_df = spark.createDataFrame(
-        rows,
-        [
-            "dataset",
-            "_batch_id",
-        ],
-    ).withColumn(
-        "_processed_timestamp",
-        F.current_timestamp(),
+    ensure_processed_batches_table(
+        spark,
+        control_table,
+    )
+
+    new_batches = (
+        spark.createDataFrame(
+            [
+                (dataset_name, batch_id)
+                for batch_id in batch_ids
+            ],
+            ["dataset", "_batch_id"],
+        )
+        .withColumn(
+            "_processed_timestamp",
+            F.current_timestamp(),
+        )
+    )
+
+    target = DeltaTable.forName(
+        spark,
+        control_table,
     )
 
     (
-        control_df.write
-        .format("delta")
-        .mode("append")
-        .saveAsTable(control_table)
+        target.alias("target")
+        .merge(
+            new_batches.alias("source"),
+            """
+            target.dataset = source.dataset
+            AND target._batch_id = source._batch_id
+            """,
+        )
+        .whenNotMatchedInsertAll()
+        .execute()
     )
 
 
