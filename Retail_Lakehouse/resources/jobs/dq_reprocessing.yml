@@ -9,7 +9,7 @@ resources:
           spec:
             client: "2"
             dependencies:
-              - ../dist/*.whl
+              - ../../dist/*.whl
 
       parameters:
         - name: environment
