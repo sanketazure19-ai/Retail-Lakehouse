@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 import inspect
 import retail_lakehouse
 import retail_lakehouse.utils.quality as quality_module
