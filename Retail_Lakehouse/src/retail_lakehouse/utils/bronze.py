@@ -55,69 +55,83 @@ def ingest_to_bronze(
         validation_rules=validation_rules,
     )
 
-def process_batch(
-    batch_df: DataFrame,
-    micro_batch_id: int,
-) -> None:
+    def process_batch(
+        batch_df: DataFrame,
+        micro_batch_id: int,
+    ) -> None:
 
-    metrics = calculate_dq_metrics(
-        batch_df=batch_df,
-        environment=environment,
-        dataset=dataset_name or "unknown",
-        batch_id=batch_id,
-        micro_batch_id=micro_batch_id,
-        threshold_percent=dq_failure_threshold_percent,
-    )
-
-    print(
-        "DQ metrics: "
-        f"dataset={metrics['dataset']}, "
-        f"micro_batch_id={metrics['micro_batch_id']}, "
-        f"total={metrics['total_records']}, "
-        f"valid={metrics['valid_records']}, "
-        f"quarantined={metrics['quarantined_records']}, "
-        f"failure_rate={metrics['dq_failure_rate_percent']:.2f}%, "
-        f"threshold={metrics['dq_failure_threshold_percent']:.2f}%, "
-        f"status={metrics['dq_status']}"
-    )
-
-    if catalog:
-        write_dq_metrics(
-            spark=spark,
-            catalog=catalog,
-            metrics=metrics,
+        metrics = calculate_dq_metrics(
+            batch_df=batch_df,
+            environment=environment,
+            dataset=dataset_name or "unknown",
+            batch_id=batch_id,
+            micro_batch_id=micro_batch_id,
+            threshold_percent=dq_failure_threshold_percent,
         )
 
-    if metrics["dq_status"] == "FAIL":
-        raise ValueError(
-            "DQ circuit breaker triggered for "
-            f"dataset '{dataset_name}'. "
-            f"Failure rate "
-            f"{metrics['dq_failure_rate_percent']:.2f}% "
-            f"exceeded threshold "
-            f"{metrics['dq_failure_threshold_percent']:.2f}%."
+        print(
+            "DQ metrics: "
+            f"dataset={metrics['dataset']}, "
+            f"micro_batch_id={metrics['micro_batch_id']}, "
+            f"total={metrics['total_records']}, "
+            f"valid={metrics['valid_records']}, "
+            f"quarantined={metrics['quarantined_records']}, "
+            f"failure_rate="
+            f"{metrics['dq_failure_rate_percent']:.2f}%, "
+            f"threshold="
+            f"{metrics['dq_failure_threshold_percent']:.2f}%, "
+            f"status={metrics['dq_status']}"
         )
 
-    valid_df = (
-        batch_df
-        .filter("_quality_status = 'VALID'")
-        .drop("_quality_status", "_quality_reason")
+        if catalog:
+            write_dq_metrics(
+                spark=spark,
+                catalog=catalog,
+                metrics=metrics,
+            )
+
+        if metrics["dq_status"] == "FAIL":
+            raise ValueError(
+                "DQ circuit breaker triggered for "
+                f"dataset '{dataset_name}'. "
+                f"Failure rate "
+                f"{metrics['dq_failure_rate_percent']:.2f}% "
+                f"exceeded threshold "
+                f"{metrics['dq_failure_threshold_percent']:.2f}%."
+            )
+
+        valid_df = (
+            batch_df
+            .filter("_quality_status = 'VALID'")
+            .drop("_quality_status", "_quality_reason")
+        )
+
+        quarantine_df = (
+            batch_df
+            .filter("_quality_status = 'QUARANTINE'")
+        )
+
+        (
+            valid_df.write
+            .format("delta")
+            .mode("append")
+            .saveAsTable(target_table)
+        )
+
+        (
+            quarantine_df.write
+            .format("delta")
+            .mode("append")
+            .saveAsTable(quarantine_table)
+        )
+
+    query = (
+        df.writeStream
+        .foreachBatch(process_batch)
+        .option("checkpointLocation", checkpoint_path)
+        .outputMode("append")
+        .trigger(availableNow=True)
+        .start()
     )
 
-    quarantine_df = batch_df.filter(
-        "_quality_status = 'QUARANTINE'"
-    )
-
-    (
-        valid_df.write
-        .format("delta")
-        .mode("append")
-        .saveAsTable(target_table)
-    )
-
-    (
-        quarantine_df.write
-        .format("delta")
-        .mode("append")
-        .saveAsTable(quarantine_table)
-    )
+    query.awaitTermination()
