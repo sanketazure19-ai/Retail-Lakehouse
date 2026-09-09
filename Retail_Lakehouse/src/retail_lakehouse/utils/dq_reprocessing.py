@@ -1,4 +1,3 @@
-from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 
@@ -11,6 +10,14 @@ def reprocess_quarantine_batch(
     required_columns: list[str],
     validation_rules: list[dict] | None = None,
 ) -> dict:
+    """
+    Reprocess one quarantined Bronze batch.
+
+    Valid records are written to Bronze.
+    Records that still fail DQ remain in quarantine.
+    The operation is idempotent for a given source file + batch.
+    """
+
     from retail_lakehouse.utils.quality import add_quality_columns
 
     quarantine_df = (
@@ -25,14 +32,14 @@ def reprocess_quarantine_batch(
             f"'{dataset_name}' and batch '{batch_id}'."
         )
 
-    # Remove Phase-2-only quarantine metadata before revalidation.
+    # Remove previous quarantine metadata before revalidation.
     reprocess_df = quarantine_df.drop(
         "_quarantine_reason",
         "_quarantine_timestamp",
         "_quarantine_batch_id",
     )
 
-    # Reapply the same DQ rules.
+    # Re-run the complete DQ rule set.
     reprocess_df = add_quality_columns(
         reprocess_df,
         required_columns=required_columns,
@@ -45,45 +52,63 @@ def reprocess_quarantine_batch(
         .drop("_quality_status", "_quality_reason")
     )
 
-    invalid_df = reprocess_df.filter(
-        F.col("_quality_status") == "QUARANTINE"
+    invalid_df = (
+        reprocess_df
+        .filter(F.col("_quality_status") == "QUARANTINE")
     )
 
     valid_count = valid_df.count()
     invalid_count = invalid_df.count()
 
-    # ------------------------------------------------------------------
-    # Idempotency
-    #
-    # Use source file + original batch as the identity of a reprocessed
-    # record. Records already present in Bronze are not inserted again.
-    # ------------------------------------------------------------------
-    if valid_count > 0:
-        if spark.catalog.tableExists(target_table):
-            bronze_df = spark.table(target_table)
+    new_valid_count = 0
 
-            if "_source_file" in bronze_df.columns:
-                existing_keys = bronze_df.select(
+    if valid_count > 0:
+
+        # Prevent duplicate Bronze records.
+        #
+        # Source file + batch identifies the original ingestion batch.
+        # Within that batch, use the dataset's business key where possible.
+        business_key_map = {
+            "customers": ["customer_id"],
+            "products": ["product_id"],
+            "orders": ["order_id"],
+            "clickstream": ["event_id"],
+            "returns": ["return_id"],
+            "promotions": ["promotion_id"],
+        }
+
+        key_columns = business_key_map.get(dataset_name)
+
+        if key_columns and spark.catalog.tableExists(target_table):
+
+            existing_df = (
+                spark.table(target_table)
+                .select(
+                    *key_columns,
                     "_source_file",
                     "_batch_id",
-                ).distinct()
-
-                valid_df = valid_df.join(
-                    existing_keys,
-                    on=["_source_file", "_batch_id"],
-                    how="left_anti",
                 )
+                .distinct()
+            )
+
+            valid_df = valid_df.join(
+                existing_df,
+                on=key_columns,
+                how="left_anti",
+            )
 
         new_valid_count = valid_df.count()
 
         if new_valid_count > 0:
-            valid_df.write.format("delta").mode("append").saveAsTable(
-                target_table
+            (
+                valid_df
+                .write
+                .format("delta")
+                .mode("append")
+                .saveAsTable(target_table)
             )
-    else:
-        new_valid_count = 0
 
-    # Preserve records that still fail validation.
+    # Keep records that still fail DQ in quarantine.
     if invalid_count > 0:
         (
             invalid_df
@@ -91,7 +116,9 @@ def reprocess_quarantine_batch(
                 "_quarantine_reason",
                 F.coalesce(
                     F.col("_quality_reason"),
-                    F.lit("DQ validation failed during reprocessing"),
+                    F.lit(
+                        "DQ validation failed during reprocessing"
+                    ),
                 ),
             )
             .withColumn(
@@ -102,8 +129,12 @@ def reprocess_quarantine_batch(
                 "_quarantine_batch_id",
                 F.lit(batch_id),
             )
-            .drop("_quality_status", "_quality_reason")
-            .write.format("delta")
+            .drop(
+                "_quality_status",
+                "_quality_reason",
+            )
+            .write
+            .format("delta")
             .mode("append")
             .saveAsTable(quarantine_table)
         )
@@ -118,7 +149,7 @@ def reprocess_quarantine_batch(
     }
 
     print(
-        f"DQ reprocessing result: "
+        "DQ reprocessing result: "
         f"dataset={dataset_name}, "
         f"batch_id={batch_id}, "
         f"valid={valid_count}, "
