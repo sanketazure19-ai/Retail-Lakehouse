@@ -13,16 +13,36 @@ def reprocess_quarantine_batch(
     """
     Reprocess one quarantined Bronze batch.
 
-    Valid records are written to Bronze.
+    Valid records are promoted to Bronze.
     Records that still fail DQ remain in quarantine.
-    The operation is idempotent for a given source file + batch.
+
+    Idempotency is based on:
+        _source_file + _batch_id + business key
+
+    Reprocessing does not append duplicate quarantine records.
     """
 
+    from delta.tables import DeltaTable
     from retail_lakehouse.utils.quality import add_quality_columns
+
+    business_key_map = {
+        "customers": ["customer_id"],
+        "products": ["product_id"],
+        "orders": ["order_id"],
+        "clickstream": ["event_id"],
+        "returns": ["return_id"],
+        "promotions": ["promotion_id"],
+    }
+
+    key_columns = business_key_map.get(dataset_name)
+
+    if not key_columns:
+        raise ValueError(
+            f"No business-key configuration for dataset '{dataset_name}'."
+        )
 
     quarantine_df = (
         spark.table(quarantine_table)
-        .filter(F.col("_environment").isNotNull())
         .filter(F.col("_batch_id") == batch_id)
     )
 
@@ -32,11 +52,24 @@ def reprocess_quarantine_batch(
             f"'{dataset_name}' and batch '{batch_id}'."
         )
 
-    # Remove previous quarantine metadata before revalidation.
-    reprocess_df = quarantine_df.drop(
-        "_quarantine_reason",
-        "_quarantine_timestamp",
-        "_quarantine_batch_id",
+    identity_columns = [
+        "_source_file",
+        "_batch_id",
+        *key_columns,
+    ]
+
+    # Collapse duplicate quarantine records created by previous
+    # reprocessing attempts.
+    reprocess_df = (
+        quarantine_df
+        .drop(
+            "_quality_status",
+            "_quality_reason",
+            "_quarantine_reason",
+            "_quarantine_timestamp",
+            "_quarantine_batch_id",
+        )
+        .dropDuplicates(identity_columns)
     )
 
     # Re-run the complete DQ rule set.
@@ -50,11 +83,13 @@ def reprocess_quarantine_batch(
         reprocess_df
         .filter(F.col("_quality_status") == "VALID")
         .drop("_quality_status", "_quality_reason")
+        .dropDuplicates(identity_columns)
     )
 
     invalid_df = (
         reprocess_df
         .filter(F.col("_quality_status") == "QUARANTINE")
+        .dropDuplicates(identity_columns)
     )
 
     valid_count = valid_df.count()
@@ -62,54 +97,64 @@ def reprocess_quarantine_batch(
 
     new_valid_count = 0
 
+    # ---------------------------------------------------------
+    # Promote valid records to Bronze.
+    # ---------------------------------------------------------
     if valid_count > 0:
 
-        # Prevent duplicate Bronze records.
-        #
-        # Source file + batch identifies the original ingestion batch.
-        # Within that batch, use the dataset's business key where possible.
-        business_key_map = {
-            "customers": ["customer_id"],
-            "products": ["product_id"],
-            "orders": ["order_id"],
-            "clickstream": ["event_id"],
-            "returns": ["return_id"],
-            "promotions": ["promotion_id"],
-        }
+        if spark.catalog.tableExists(target_table):
 
-        key_columns = business_key_map.get(dataset_name)
-
-        if key_columns and spark.catalog.tableExists(target_table):
-
-            existing_df = (
+            existing_identity_df = (
                 spark.table(target_table)
-                .select(
-                    *key_columns,
-                    "_source_file",
-                    "_batch_id",
-                )
-                .distinct()
+                .select(*identity_columns)
+                .dropDuplicates(identity_columns)
             )
 
-            valid_df = valid_df.join(
-                existing_df,
-                on=key_columns,
+            new_valid_df = valid_df.join(
+                existing_identity_df,
+                on=identity_columns,
                 how="left_anti",
             )
 
-        new_valid_count = valid_df.count()
+        else:
+            new_valid_df = valid_df
+
+        new_valid_count = new_valid_df.count()
 
         if new_valid_count > 0:
             (
-                valid_df
+                new_valid_df
                 .write
                 .format("delta")
                 .mode("append")
                 .saveAsTable(target_table)
             )
 
-    # Keep records that still fail DQ in quarantine.
+    # ---------------------------------------------------------
+    # Synchronize quarantine state.
+    #
+    # Remove the existing records for this batch and replace
+    # them with only the records that still fail DQ.
+    #
+    # This prevents duplicate quarantine records on retries.
+    # ---------------------------------------------------------
+    quarantine_table_exists = spark.catalog.tableExists(
+        quarantine_table
+    )
+
+    if quarantine_table_exists:
+
+        quarantine_delta = DeltaTable.forName(
+            spark,
+            quarantine_table,
+        )
+
+        quarantine_delta.delete(
+            F.col("_batch_id") == batch_id
+        )
+
     if invalid_count > 0:
+
         (
             invalid_df
             .withColumn(
