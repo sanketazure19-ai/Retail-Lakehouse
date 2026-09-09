@@ -6,19 +6,19 @@ datasets:
       path: erp/customers
       format: csv
       ingestion: autoloader
-      dq_failure_threshold_percent: 10
+      ingestion_alert_threshold_percent: 1
 
     products:
       path: erp/products
       format: csv
       ingestion: autoloader
-      dq_failure_threshold_percent: 10
+      ingestion_alert_threshold_percent: 1
 
     orders:
       path: erp/orders
       format: csv
       ingestion: autoloader
-      dq_failure_threshold_percent: 10
+      ingestion_alert_threshold_percent: 1
 
   ecommerce:
 
@@ -26,13 +26,13 @@ datasets:
       path: ecommerce/clickstream
       format: csv
       ingestion: autoloader
-      dq_failure_threshold_percent: 10
+      ingestion_alert_threshold_percent: 1
 
     returns:
       path: ecommerce/returns
       format: csv
       ingestion: autoloader
-      dq_failure_threshold_percent: 10
+      ingestion_alert_threshold_percent: 1
 
   marketing:
 
@@ -40,4 +40,4 @@ datasets:
       path: marketing/promotions
       format: csv
       ingestion: batch
-      dq_failure_threshold_percent: 10
+      ingestion_alert_threshold_percent: 1

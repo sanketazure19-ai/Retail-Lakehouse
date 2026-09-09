@@ -8,17 +8,6 @@
 #
 # ///
 
-import inspect
-
-import retail_lakehouse
-import retail_lakehouse.utils.quality as quality_module
-
-print("=== PACKAGE DIAGNOSTIC ===")
-print(f"retail_lakehouse package: {retail_lakehouse.__file__}")
-print(f"quality module: {quality_module.__file__}")
-print(inspect.getsource(quality_module.add_quality_columns))
-print("=== END PACKAGE DIAGNOSTIC ===")
-
 from datetime import datetime, timezone
 
 from retail_lakehouse.config.settings import (
@@ -77,11 +66,10 @@ checkpoint_root = env_config["checkpoint_root"]
 schema_root = env_config["schema_root"]
 
 dataset_config = datasets[domain][dataset_name]
-
-dq_failure_threshold_percent = float(
+ingestion_alert_threshold_percent = float(
     dataset_config.get(
-        "dq_failure_threshold_percent",
-        10,
+        "ingestion_alert_threshold_percent",
+        1.0,
     )
 )
 
@@ -94,7 +82,6 @@ schema_path = f"{schema_root}/{domain}/{dataset_name}"
 checkpoint_path = f"{checkpoint_root}/{domain}/{dataset_name}"
 
 target_table = f"{catalog}.bronze.{dataset_name}"
-quarantine_table = f"{catalog}.bronze_quarantine.{dataset_name}"
 
 batch_id = generate_batch_id(dataset_name)
 
@@ -106,111 +93,6 @@ schemas = {
     "orders": ORDER_SCHEMA,
     "clickstream": CLICKSTREAM_SCHEMA,
     "returns": RETURN_SCHEMA,
-}
-
-required_columns = {
-    "customers": [
-        "customer_id",
-        "email",
-        "signup_date",
-        "customer_segment",
-    ],
-    "products": [
-        "product_id",
-        "product_name",
-        "category",
-        "unit_price",
-        "currency",
-    ],
-    "orders": [
-        "order_id",
-        "customer_id",
-        "product_id",
-        "order_date",
-        "quantity",
-        "unit_price",
-        "payment_method",
-        "order_status",
-    ],
-    "clickstream": [
-        "event_id",
-        "customer_id",
-        "event_timestamp",
-        "event_type",
-        "session_id",
-    ],
-    "returns": [
-        "return_id",
-        "order_id",
-        "customer_id",
-        "product_id",
-        "return_date",
-        "return_quantity",
-        "refund_amount",
-        "return_status",
-    ],
-}
-
-# COMMAND ----------
-
-validation_rules = {
-    "customers": [
-        {
-            "column": "email",
-            "rule": "regex",
-            "pattern": r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
-            "reason": "Invalid email format",
-        },
-    ],
-    "products": [
-        {
-            "column": "unit_price",
-            "rule": "greater_than_or_equal",
-            "value": 0,
-            "reason": "unit_price must be >= 0",
-        },
-    ],
-    "orders": [
-        {
-            "column": "quantity",
-            "rule": "greater_than",
-            "value": 0,
-            "reason": "quantity must be > 0",
-        },
-        {
-            "column": "unit_price",
-            "rule": "greater_than_or_equal",
-            "value": 0,
-            "reason": "unit_price must be >= 0",
-        },
-        {
-            "column": "discount_amount",
-            "rule": "greater_than_or_equal",
-            "value": 0,
-            "reason": "discount_amount must be >= 0",
-        },
-    ],
-    "clickstream": [
-        {
-            "column": "event_type",
-            "rule": "not_empty",
-            "reason": "event_type cannot be empty",
-        },
-    ],
-    "returns": [
-        {
-            "column": "return_quantity",
-            "rule": "greater_than",
-            "value": 0,
-            "reason": "return_quantity must be > 0",
-        },
-        {
-            "column": "refund_amount",
-            "rule": "greater_than_or_equal",
-            "value": 0,
-            "reason": "refund_amount must be >= 0",
-        },
-    ],
 }
 
 # COMMAND ----------
@@ -227,10 +109,11 @@ print(f"Domain: {domain}")
 print(f"Dataset: {dataset_name}")
 print(f"RAW path: {raw_path}")
 print(f"Target table: {target_table}")
-print(f"Quarantine table: {quarantine_table}")
+print(f"Schema path: {schema_path}")
+print(f"Checkpoint path: {checkpoint_path}")
 print(
-    f"DQ failure threshold: "
-    f"{dq_failure_threshold_percent:.2f}%"
+    f"Ingestion alert threshold: "
+    f"{ingestion_alert_threshold_percent:.2f}%"
 )
 
 # COMMAND ----------
@@ -244,15 +127,12 @@ try:
         schema_path=schema_path,
         checkpoint_path=checkpoint_path,
         target_table=target_table,
-        quarantine_table=quarantine_table,
         source_schema=schemas[dataset_name],
-        required_columns=required_columns[dataset_name],
         environment=environment,
         batch_id=batch_id,
-        validation_rules=validation_rules.get(dataset_name),
         catalog=catalog,
         dataset_name=dataset_name,
-        dq_failure_threshold_percent=dq_failure_threshold_percent,
+        ingestion_alert_threshold_percent=ingestion_alert_threshold_percent,
     )
 
     cell_end = datetime.now(timezone.utc)
