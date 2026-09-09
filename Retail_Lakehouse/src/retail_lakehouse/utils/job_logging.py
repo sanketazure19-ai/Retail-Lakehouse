@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pyspark.sql.types import (
     LongType,
@@ -56,23 +56,30 @@ def get_job_context(spark, dbutils) -> dict:
         "task_run_id": task_run_id,
     }
 
+
 def log_cell(
     spark,
     catalog: str,
     environment: str,
-    context: dict,
+    job_context: dict,
     task_key: str,
     notebook_name: str,
     cell_name: str,
+    domain: str,
+    dataset: str,
     status: str,
-    start_time: datetime,
-    end_time: datetime,
-    domain: str | None = None,
-    dataset: str | None = None,
-    rows_processed: int | None = None,
+    rows_processed: int = 0,
     error_type: str | None = None,
     error_message: str | None = None,
 ) -> None:
+
+    start_time = datetime.now(timezone.utc)
+
+    job_id = job_context.get("job_id")
+    run_id = job_context.get("run_id")
+    task_run_id = job_context.get("task_run_id")
+
+    end_time = datetime.now(timezone.utc)
 
     duration_ms = int(
         (end_time - start_time).total_seconds() * 1000
@@ -81,9 +88,9 @@ def log_cell(
     row = [(
         str(uuid.uuid4()),
         environment,
-        context.get("job_id"),
-        context.get("run_id"),
-        context.get("task_run_id"),
+        job_id,
+        run_id,
+        task_run_id,
         task_key,
         notebook_name,
         cell_name,
@@ -96,7 +103,7 @@ def log_cell(
         rows_processed,
         error_type,
         error_message,
-        datetime.now(start_time.tzinfo),
+        datetime.now(timezone.utc),
     )]
 
     schema = StructType([
