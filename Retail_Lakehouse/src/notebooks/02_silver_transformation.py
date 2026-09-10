@@ -425,11 +425,14 @@ try:
 
     log_cell(
         spark=spark,
+        catalog=catalog,
+        environment=environment,
         job_context=job_context,
         task_key=task_key,
         notebook_name=notebook_name,
+        cell_name="silver_transformation",
         status="SUCCESS",
-        domain="silver",
+        domain=domain,
         dataset=dataset_name,
     )
 
@@ -441,15 +444,18 @@ except Exception as exc:
     # -----------------------------------------------------------------------
 
     log_cell(
-        spark=spark,
-        job_context=job_context,
-        task_key=task_key,
-        notebook_name=notebook_name,
-        status="FAILED",
-        domain="silver",
-        dataset=dataset_name,
-        error_type=type(exc).__name__,
-        error_message=str(exc),
+            spark=spark,
+            catalog=catalog,
+            environment=environment,
+            job_context=job_context,
+            task_key=task_key,
+            notebook_name=notebook_name,
+            cell_name="silver_transformation",
+            status="FAILED",
+            domain=domain,
+            dataset=dataset_name,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
     )
 
     raise
