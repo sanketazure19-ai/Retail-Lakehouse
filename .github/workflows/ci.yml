@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: Retail_Lakehouse
+
 jobs:
   validate:
     name: Build and Validate
