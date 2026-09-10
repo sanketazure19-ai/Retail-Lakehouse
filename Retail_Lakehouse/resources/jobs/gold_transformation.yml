@@ -17,4 +17,7 @@ resources:
             notebook_path: ../../src/notebooks/03_gold_transformation.py
             base_parameters:
               environment: ${bundle.target}
+              job_id: "{{job.id}}"
+              job_run_id: "{{job.run_id}}"
+              task_run_id: "{{task.run_id}}"
           environment_key: default
