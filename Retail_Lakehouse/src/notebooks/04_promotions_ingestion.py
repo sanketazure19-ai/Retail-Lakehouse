@@ -27,11 +27,11 @@ job_id = dbutils.widgets.get("job_id")
 job_run_id = dbutils.widgets.get("job_run_id")
 task_run_id = dbutils.widgets.get("task_run_id")
 
-job_context = get_job_context(
-    job_id=job_id,
-    job_run_id=job_run_id,
-    task_run_id=task_run_id,
-)
+job_context = {
+    "job_id": job_id,
+    "run_id": job_run_id,
+    "task_run_id": task_run_id,
+}
 
 task_key = "promotions_ingestion"
 notebook_name = "04_promotions_ingestion"
