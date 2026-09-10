@@ -21,6 +21,10 @@ permissions:
   id-token: write
   contents: read
 
+defaults:
+  run:
+    working-directory: Retail_Lakehouse
+
 concurrency:
   group: retail-lakehouse-deployment
   cancel-in-progress: false
