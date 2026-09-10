@@ -1,0 +1,78 @@
+name: Retail Lakehouse CD
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Databricks deployment target"
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: retail-lakehouse-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Retail Lakehouse
+    runs-on: ubuntu-latest
+
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'dev' }}
+
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Compile Python
+        run: |
+          python -m compileall src
+
+      - name: Build wheel
+        run: |
+          python -m build
+
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Validate bundle
+        run: |
+          databricks bundle validate --target "$DEPLOY_TARGET"
+
+      - name: Deploy bundle
+        run: |
+          databricks bundle deploy --target "$DEPLOY_TARGET"
+
+      - name: Deployment summary
+        run: |
+          echo "Retail Lakehouse deployment completed"
+          echo "Target: $DEPLOY_TARGET"
+          echo "Commit: $GITHUB_SHA"
