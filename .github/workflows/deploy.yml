@@ -66,7 +66,13 @@ jobs:
 
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
-
+        
+      - name: Verify Databricks authentication
+        run: |
+          test -n "$DATABRICKS_HOST"
+          test -n "$DATABRICKS_CLIENT_ID"
+          test -n "$DATABRICKS_CLIENT_SECRET"
+          echo "Databricks authentication variables are configured"
       - name: Validate bundle
         run: |
           databricks bundle validate --target "$DEPLOY_TARGET"
