@@ -37,10 +37,9 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'dev' }}
 
     env:
-      DATABRICKS_AUTH_TYPE: github-oidc
       DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
-      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'dev' }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
     steps:
       - name: Checkout
