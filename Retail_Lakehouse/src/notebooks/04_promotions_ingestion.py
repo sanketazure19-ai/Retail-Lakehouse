@@ -27,11 +27,11 @@ job_id = dbutils.widgets.get("job_id")
 job_run_id = dbutils.widgets.get("job_run_id")
 task_run_id = dbutils.widgets.get("task_run_id")
 
-job_context = {
-    "job_id": dbutils.widgets.get("job_id"),
-    "run_id": dbutils.widgets.get("job_run_id"),
-    "task_run_id": dbutils.widgets.get("task_run_id"),
-}
+job_context = get_job_context(
+    job_id=job_id,
+    job_run_id=job_run_id,
+    task_run_id=task_run_id,
+)
 
 task_key = "promotions_ingestion"
 notebook_name = "04_promotions_ingestion"
@@ -54,12 +54,18 @@ raw_path = build_raw_path(
 
 target_table = f"{catalog}.bronze.promotions"
 
+batch_id = (
+    f"promotions_"
+    f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+)
+
 
 # COMMAND ----------
 
 print(f"Environment: {environment}")
 print(f"RAW path: {raw_path}")
 print(f"Target table: {target_table}")
+print(f"Batch ID: {batch_id}")
 
 
 # COMMAND ----------
@@ -74,6 +80,7 @@ try:
         target_table=target_table,
         source_schema=PROMOTION_SCHEMA,
         environment=environment,
+        batch_id=batch_id,
     )
 
     cell_end = datetime.now(timezone.utc)
@@ -82,13 +89,11 @@ try:
         spark=spark,
         catalog=catalog,
         environment=environment,
-        context=job_context,
+        job_context=job_context,
         task_key=task_key,
         notebook_name=notebook_name,
         cell_name="promotions_ingestion",
         status="SUCCESS",
-        start_time=cell_start,
-        end_time=cell_end,
         domain="marketing",
         dataset="promotions",
     )
@@ -107,13 +112,11 @@ except Exception as exc:
             spark=spark,
             catalog=catalog,
             environment=environment,
-            context=job_context,
+            job_context=job_context,
             task_key=task_key,
             notebook_name=notebook_name,
             cell_name="promotions_ingestion",
             status="FAILED",
-            start_time=cell_start,
-            end_time=cell_end,
             domain="marketing",
             dataset="promotions",
             error_type=type(exc).__name__,

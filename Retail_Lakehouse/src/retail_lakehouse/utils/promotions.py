@@ -1,4 +1,18 @@
+from datetime import datetime, timezone
+
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+from pyspark.sql.types import StringType, StructField, StructType
+
+
+def _add_corrupt_record_field(source_schema):
+    if "_corrupt_record" in source_schema.fieldNames():
+        return source_schema
+
+    return StructType(
+        source_schema.fields
+        + [StructField("_corrupt_record", StringType(), True)]
+    )
 
 
 def ingest_promotions(
@@ -7,69 +21,26 @@ def ingest_promotions(
     target_table: str,
     source_schema,
     environment: str,
+    batch_id: str,
 ) -> None:
 
-    # Read CSV without forcing the source schema.
-    # CSV numeric values may arrive as strings such as "15.0".
+    bronze_schema = _add_corrupt_record_field(source_schema)
+
     df = (
         spark.read
         .format("csv")
         .option("header", "true")
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", "_corrupt_record")
+        .schema(bronze_schema)
         .load(source_path)
     )
 
-    print(
-        f"Promotions source row count: "
-        f"{df.count()}"
-    )
-
-    # Capture Unity Catalog-compatible source metadata
-    # before projecting the business columns.
     df = (
         df
         .withColumn(
             "_source_file",
             F.col("_metadata.file_path"),
-        )
-        .withColumn(
-            "promotion_id",
-            F.col("promotion_id").cast("string"),
-        )
-        .withColumn(
-            "promotion_name",
-            F.col("promotion_name").cast("string"),
-        )
-        .withColumn(
-            "product_id",
-            F.col("product_id").cast("string"),
-        )
-        .withColumn(
-            "start_date",
-            F.to_date(
-                F.col("start_date"),
-                "yyyy-MM-dd",
-            ),
-        )
-        .withColumn(
-            "end_date",
-            F.to_date(
-                F.col("end_date"),
-                "yyyy-MM-dd",
-            ),
-        )
-        .withColumn(
-            "discount_percent",
-            F.col("discount_percent")
-            .cast("double")
-            .cast("int"),
-        )
-        .withColumn(
-            "promotion_type",
-            F.col("promotion_type").cast("string"),
-        )
-        .withColumn(
-            "status",
-            F.col("status").cast("string"),
         )
         .withColumn(
             "_ingestion_timestamp",
@@ -81,7 +52,7 @@ def ingest_promotions(
         )
         .withColumn(
             "_batch_id",
-            F.lit("promotions_batch"),
+            F.lit(batch_id),
         )
         .withColumn(
             "_environment",
@@ -89,54 +60,30 @@ def ingest_promotions(
         )
     )
 
-    required_columns = [
-        "promotion_id",
-        "promotion_name",
-        "product_id",
-        "start_date",
-        "end_date",
-        "discount_percent",
-        "promotion_type",
-        "status",
-    ]
+    total_records = df.count()
 
-    invalid_condition = None
+    corrupt_records = df.filter(
+        F.col("_corrupt_record").isNotNull()
+    ).count()
 
-    for column in required_columns:
-
-        condition = (
-            F.col(column).isNull()
-            | (
-                F.trim(
-                    F.col(column).cast("string")
-                ) == ""
-            )
-        )
-
-        if invalid_condition is None:
-            invalid_condition = condition
-        else:
-            invalid_condition = (
-                invalid_condition | condition
-            )
-
-    valid_df = df.filter(
-        ~invalid_condition
+    corrupt_rate_percent = (
+        (corrupt_records / total_records) * 100
+        if total_records > 0
+        else 0.0
     )
 
     print(
-        f"Promotions valid row count: "
-        f"{valid_df.count()}"
+        f"Promotions ingestion metrics: "
+        f"total={total_records}, "
+        f"corrupt={corrupt_records}, "
+        f"corrupt_rate={corrupt_rate_percent:.2f}%"
     )
 
     (
-        valid_df.write
+        df.write
         .format("delta")
-        .mode("overwrite")
-        .option(
-            "overwriteSchema",
-            "true",
-        )
+        .mode("append")
+        .option("mergeSchema", "true")
         .saveAsTable(target_table)
     )
 
