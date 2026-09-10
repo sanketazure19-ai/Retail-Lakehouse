@@ -1,7 +1,9 @@
 # Databricks notebook source
 
-from retail_lakehouse.config.settings import get_environment
-from retail_lakehouse.config.loader import load_config
+from retail_lakehouse.config.settings import (
+    get_environment,
+    get_datasets,
+)
 from retail_lakehouse.utils.quality import add_quality_columns
 from retail_lakehouse.utils.silver import (
     get_unprocessed_batches,
@@ -46,9 +48,9 @@ notebook_name = "02_silver_transformation"
 env_config = get_environment(environment)
 catalog = env_config["catalog"]
 
-config = load_config()
+datasets = get_datasets()
 
-dataset_config = config["datasets"][domain][dataset_name]
+dataset_config = datasets[domain][dataset_name]
 silver_config = dataset_config["silver"]
 
 processing_mode = silver_config.get(
