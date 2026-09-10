@@ -40,6 +40,7 @@ jobs:
       DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      DEPLOY_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'dev' }}
 
     steps:
       - name: Checkout
