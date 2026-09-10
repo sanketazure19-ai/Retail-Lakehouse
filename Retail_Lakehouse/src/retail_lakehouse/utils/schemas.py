@@ -77,7 +77,7 @@ PROMOTION_SCHEMA = StructType([
     StructField("product_id", StringType(), True),
     StructField("start_date", DateType(), True),
     StructField("end_date", DateType(), True),
-    StructField("discount_percent", IntegerType(), True),
+    StructField("discount_percent", DoubleType(), True),
     StructField("promotion_type", StringType(), True),
     StructField("status", StringType(), True),
 ])

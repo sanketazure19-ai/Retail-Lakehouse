@@ -1,7 +1,6 @@
 # Databricks notebook source
 
 from datetime import datetime, timezone
-
 from retail_lakehouse.config.settings import (
     get_datasets,
     get_environment,
