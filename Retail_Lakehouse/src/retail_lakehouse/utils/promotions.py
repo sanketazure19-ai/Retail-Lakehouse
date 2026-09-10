@@ -82,8 +82,9 @@ def ingest_promotions(
     (
         df.write
         .format("delta")
-        .mode("append")
         .option("mergeSchema", "true")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
         .saveAsTable(target_table)
     )
 
