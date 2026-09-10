@@ -1,51 +1,65 @@
 # Databricks notebook source
 
-from pyspark.sql import functions as F
-
-from retail_lakehouse.utils.config import load_config
-from retail_lakehouse.utils.dq_metrics import (
-    calculate_dq_metrics,
-    write_dq_metrics,
-)
-from retail_lakehouse.utils.job_logging import (
-    get_job_context,
-    log_cell,
-)
+from retail_lakehouse.config.settings import get_environment
+from retail_lakehouse.config.loader import load_config
 from retail_lakehouse.utils.quality import add_quality_columns
 from retail_lakehouse.utils.silver import (
-    deduplicate,
     get_unprocessed_batches,
-    mark_batches_processed,
+    get_latest_snapshot,
+    transform_silver,
     merge_to_silver,
-    standardize_columns,
     write_quarantine,
+    mark_batches_processed,
 )
-from retail_lakehouse.utils.validation import validate_not_empty
+from retail_lakehouse.utils.silver_metrics import (
+    calculate_silver_dq_metrics,
+    write_silver_dq_metrics,
+)
+from retail_lakehouse.utils.job_logging import log_cell
+from pyspark.sql import functions as F
 
-# COMMAND ----------
 
-dbutils.widgets.text("environment", "")
+dbutils.widgets.text("environment", "dev")
 dbutils.widgets.text("domain", "")
 dbutils.widgets.text("dataset", "")
 dbutils.widgets.text("job_id", "")
 dbutils.widgets.text("job_run_id", "")
 dbutils.widgets.text("task_run_id", "")
 
-# COMMAND ----------
-
 environment = dbutils.widgets.get("environment")
 domain = dbutils.widgets.get("domain")
 dataset_name = dbutils.widgets.get("dataset")
 
-# COMMAND ----------
+job_id = dbutils.widgets.get("job_id")
+job_run_id = dbutils.widgets.get("job_run_id")
+task_run_id = dbutils.widgets.get("task_run_id")
 
-catalog = load_config("environments.yml")["environments"][environment]["catalog"]
+job_context = {
+    "job_id": job_id,
+    "run_id": job_run_id,
+    "task_run_id": task_run_id,
+}
 
-datasets_config = load_config("datasets.yml")["datasets"]
+task_key = f"silver_{dataset_name}"
+notebook_name = "02_silver_transformation"
 
-dataset_config = datasets_config[domain][dataset_name]
+env_config = get_environment(environment)
+catalog = env_config["catalog"]
 
+config = load_config()
+
+dataset_config = config["datasets"][domain][dataset_name]
 silver_config = dataset_config["silver"]
+
+processing_mode = silver_config.get(
+    "processing_mode",
+    "incremental",
+)
+
+dq_alert_threshold_percent = silver_config.get(
+    "dq_alert_threshold_percent",
+    1.0,
+)
 
 required_columns = silver_config.get(
     "required_columns",
@@ -57,30 +71,10 @@ validation_rules = silver_config.get(
     [],
 )
 
-dq_failure_threshold_percent = silver_config.get(
-    "dq_alert_threshold_percent",
-    1.0,
-)
-
-# COMMAND ----------
-
-source_table = (
-    f"{catalog}.bronze.{dataset_name}"
-)
-
-target_table = (
-    f"{catalog}.silver.{dataset_name}"
-)
-
-quarantine_table = (
-    f"{catalog}.silver_quarantine.{dataset_name}"
-)
-
-control_table = (
-    f"{catalog}.silver.processed_batches"
-)
-
-# COMMAND ----------
+source_table = f"{catalog}.bronze.{dataset_name}"
+target_table = f"{catalog}.silver.{dataset_name}"
+quarantine_table = f"{catalog}.silver_quarantine.{dataset_name}"
+control_table = f"{catalog}.silver.processed_batches"
 
 key_columns = {
     "customers": ["customer_id"],
@@ -89,171 +83,236 @@ key_columns = {
     "clickstream": ["event_id"],
     "returns": ["return_id"],
     "promotions": ["promotion_id"],
-}
-
-if dataset_name not in key_columns:
-    raise ValueError(
-        f"No Silver business key configured for '{dataset_name}'"
-    )
-
-business_keys = key_columns[dataset_name]
-
-# COMMAND ----------
-
-job_context = get_job_context(
-    spark,
-    dbutils,
-)
-
-task_key = dataset_name
-
-notebook_name = "02_silver_transformation"
-
-# COMMAND ----------
+}[dataset_name]
 
 print(f"Environment: {environment}")
 print(f"Domain: {domain}")
 print(f"Dataset: {dataset_name}")
-print(f"Source: {source_table}")
-print(f"Target: {target_table}")
-print(f"Quarantine: {quarantine_table}")
-print(f"Business keys: {business_keys}")
-print(f"Required columns: {required_columns}")
-print(f"Validation rules: {validation_rules}")
+print(f"Processing mode: {processing_mode}")
+print(f"Source table: {source_table}")
+print(f"Target table: {target_table}")
+print(f"Quarantine table: {quarantine_table}")
+print(f"Control table: {control_table}")
+print(f"Key columns: {key_columns}")
 
-print(
-    "DQ alert threshold: "
-    f"{dq_failure_threshold_percent}%"
-)
 
-# COMMAND ----------
+try:
 
-unprocessed_batches = get_unprocessed_batches(
-    spark=spark,
-    source_table=source_table,
-    control_table=control_table,
-    dataset_name=dataset_name,
-)
+    source_df = spark.table(source_table)
 
-print(
-    f"Unprocessed batches: {unprocessed_batches}"
-)
+    if processing_mode == "snapshot":
 
-# COMMAND ----------
-
-if not unprocessed_batches:
-    print(
-        f"No unprocessed batches for {dataset_name}"
-    )
-else:
-
-    for batch_id in unprocessed_batches:
-
-        cell_name = (
-            f"silver_dq_{dataset_name}_{batch_id}"
+        print(
+            f"Processing {dataset_name} using snapshot semantics."
         )
 
-        try:
+        dq_df = add_quality_columns(
+            source_df,
+            required_columns=required_columns,
+            validation_rules=validation_rules,
+        )
 
-            source_df = (
-                spark.table(source_table)
-                .filter(
-                    F.col("_batch_id") == batch_id
-                )
+        total_records = dq_df.count()
+
+        quarantined_df = dq_df.filter(
+            F.col("_quality_status") == "QUARANTINE"
+        )
+
+        valid_df = dq_df.filter(
+            F.col("_quality_status") == "VALID"
+        )
+
+        quarantined_records = quarantined_df.count()
+        valid_records = valid_df.count()
+
+        batch_ids = [
+            row["_batch_id"]
+            for row in (
+                dq_df
+                .select("_batch_id")
+                .where(F.col("_batch_id").isNotNull())
+                .distinct()
+                .collect()
             )
+        ]
 
-            validate_not_empty(source_df)
+        batch_id = (
+            batch_ids[-1]
+            if batch_ids
+            else f"snapshot_{dataset_name}"
+        )
 
-            source_df = standardize_columns(
-                source_df
+        dq_failure_rate_percent = (
+            quarantined_records / total_records * 100
+            if total_records > 0
+            else 0.0
+        )
+
+        dq_status = (
+            "ALERT"
+            if dq_failure_rate_percent
+            > dq_alert_threshold_percent
+            else "PASS"
+        )
+
+        metrics = {
+            "environment": environment,
+            "dataset": dataset_name,
+            "batch_id": batch_id,
+            "micro_batch_id": -1,
+            "total_records": total_records,
+            "valid_records": valid_records,
+            "quarantined_records": quarantined_records,
+            "dq_failure_rate_percent": dq_failure_rate_percent,
+            "dq_failure_threshold_percent": dq_alert_threshold_percent,
+            "dq_status": dq_status,
+        }
+
+        print(
+            "Silver DQ metrics: "
+            f"total={total_records}, "
+            f"valid={valid_records}, "
+            f"quarantined={quarantined_records}, "
+            f"dq_failure_rate="
+            f"{dq_failure_rate_percent:.2f}%, "
+            f"status={dq_status}"
+        )
+
+        write_silver_dq_metrics(
+            spark=spark,
+            catalog=catalog,
+            metrics=metrics,
+        )
+
+        write_quarantine(
+            spark,
+            quarantined_df,
+            quarantine_table,
+        )
+
+        latest_valid_df = get_latest_snapshot(
+            valid_df,
+            key_columns=key_columns,
+        )
+
+        transformed_df = transform_silver(
+            latest_valid_df,
+            key_columns=key_columns,
+            environment=environment,
+        )
+
+        merge_to_silver(
+            spark,
+            transformed_df,
+            target_table,
+            key_columns=key_columns,
+        )
+
+        print(
+            f"Snapshot processing completed for "
+            f"{dataset_name}."
+        )
+
+    elif processing_mode == "incremental":
+
+        print(
+            f"Processing {dataset_name} using "
+            "incremental semantics."
+        )
+
+        unprocessed_batches = get_unprocessed_batches(
+            spark=spark,
+            source_table=source_table,
+            control_table=control_table,
+            dataset_name=dataset_name,
+        )
+
+        print(
+            f"Unprocessed batches: {unprocessed_batches}"
+        )
+
+        for batch_id in unprocessed_batches:
+
+            batch_df = source_df.filter(
+                F.col("_batch_id") == batch_id
             )
 
             dq_df = add_quality_columns(
-                source_df,
+                batch_df,
                 required_columns=required_columns,
                 validation_rules=validation_rules,
             )
 
-            metrics = calculate_dq_metrics(
-                batch_df=dq_df,
+            total_records = dq_df.count()
+
+            quarantined_df = dq_df.filter(
+                F.col("_quality_status") == "QUARANTINE"
+            )
+
+            valid_df = dq_df.filter(
+                F.col("_quality_status") == "VALID"
+            )
+
+            quarantined_records = quarantined_df.count()
+            valid_records = valid_df.count()
+
+            dq_failure_rate_percent = (
+                quarantined_records / total_records * 100
+                if total_records > 0
+                else 0.0
+            )
+
+            dq_status = (
+                "ALERT"
+                if dq_failure_rate_percent
+                > dq_alert_threshold_percent
+                else "PASS"
+            )
+
+            metrics = calculate_silver_dq_metrics(
                 environment=environment,
                 dataset=dataset_name,
                 batch_id=batch_id,
-                micro_batch_id=0,
-                threshold_percent=dq_failure_threshold_percent,
+                micro_batch_id=-1,
+                total_records=total_records,
+                valid_records=valid_records,
+                quarantined_records=quarantined_records,
+                dq_alert_threshold_percent=dq_alert_threshold_percent,
             )
 
-            write_dq_metrics(
+            print(
+                "Silver DQ metrics: "
+                f"total={total_records}, "
+                f"valid={valid_records}, "
+                f"quarantined={quarantined_records}, "
+                f"dq_failure_rate="
+                f"{dq_failure_rate_percent:.2f}%, "
+                f"status={dq_status}"
+            )
+
+            write_silver_dq_metrics(
                 spark=spark,
                 catalog=catalog,
                 metrics=metrics,
             )
 
-            print(
-                "Silver DQ metrics: "
-                f"total={metrics['total_records']}, "
-                f"valid={metrics['valid_records']}, "
-                f"quarantined="
-                f"{metrics['quarantined_records']}, "
-                f"failure_rate="
-                f"{metrics['dq_failure_rate_percent']:.2f}%, "
-                f"status={metrics['dq_status']}"
-            )
-
-            quarantine_df = (
-                dq_df
-                .filter(
-                    F.col("_quality_status")
-                    == "QUARANTINE"
-                )
-                .withColumn(
-                    "_quarantine_timestamp",
-                    F.current_timestamp(),
-                )
-            )
-
             write_quarantine(
-                spark=spark,
-                df=quarantine_df,
-                quarantine_table=quarantine_table,
+                spark,
+                quarantined_df,
+                quarantine_table,
             )
 
-            valid_df = (
-                dq_df
-                .filter(
-                    F.col("_quality_status")
-                    == "VALID"
-                )
-                .drop(
-                    "_quality_status",
-                    "_quality_reason",
-                )
-            )
-
-            valid_df = deduplicate(
+            transformed_df = transform_silver(
                 valid_df,
-                key_columns=business_keys,
+                key_columns=key_columns,
+                environment=environment,
             )
-
-            valid_df = (
-                valid_df
-                .withColumn(
-                    "_silver_timestamp",
-                    F.current_timestamp(),
-                )
-                .withColumn(
-                    "_silver_environment",
-                    F.lit(environment),
-                )
-            )
-
-            valid_count = valid_df.count()
 
             merge_to_silver(
-                spark=spark,
-                df=valid_df,
-                target_table=target_table,
-                key_columns=business_keys,
+                spark,
+                transformed_df,
+                target_table,
+                key_columns=key_columns,
             )
 
             mark_batches_processed(
@@ -263,42 +322,40 @@ else:
                 batch_ids=[batch_id],
             )
 
-            log_cell(
-                spark=spark,
-                catalog=catalog,
-                environment=environment,
-                job_context=job_context,
-                task_key=task_key,
-                notebook_name=notebook_name,
-                cell_name=cell_name,
-                domain=domain,
-                dataset=dataset_name,
-                status="SUCCESS",
-                rows_processed=valid_count,
-            )
-
             print(
-                f"Successfully processed "
-                f"batch {batch_id}: "
-                f"{valid_count} valid records"
+                f"Processed batch {batch_id} "
+                f"for {dataset_name}."
             )
 
-        except Exception as exc:
+    else:
+        raise ValueError(
+            f"Unsupported processing_mode "
+            f"'{processing_mode}' for "
+            f"{dataset_name}."
+        )
 
-            log_cell(
-                spark=spark,
-                catalog=catalog,
-                environment=environment,
-                job_context=job_context,
-                task_key=task_key,
-                notebook_name=notebook_name,
-                cell_name=cell_name,
-                domain=domain,
-                dataset=dataset_name,
-                status="FAILED",
-                rows_processed=0,
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-            )
+    log_cell(
+        spark=spark,
+        job_context=job_context,
+        task_key=task_key,
+        notebook_name=notebook_name,
+        status="SUCCESS",
+        domain="silver",
+        dataset=dataset_name,
+    )
 
-            raise
+except Exception as exc:
+
+    log_cell(
+        spark=spark,
+        job_context=job_context,
+        task_key=task_key,
+        notebook_name=notebook_name,
+        status="FAILED",
+        domain="silver",
+        dataset=dataset_name,
+        error_type=type(exc).__name__,
+        error_message=str(exc),
+    )
+
+    raise

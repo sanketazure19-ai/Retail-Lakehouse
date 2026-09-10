@@ -23,7 +23,38 @@ def deduplicate(
     )
 
     return (
-        df.withColumn("_row_number", F.row_number().over(window))
+        df.withColumn(
+            "_row_number",
+            F.row_number().over(window),
+        )
+        .filter(F.col("_row_number") == 1)
+        .drop("_row_number")
+    )
+
+
+def get_latest_snapshot(
+    df: DataFrame,
+    key_columns: list[str],
+) -> DataFrame:
+    """
+    Return the latest record for each business key from a mutable
+    snapshot source.
+
+    Snapshot sources may contain multiple versions of the same
+    business key across different ingestion batches. The latest
+    ingestion timestamp is treated as the latest source state.
+    """
+
+    window = Window.partitionBy(*key_columns).orderBy(
+        F.col("_ingestion_timestamp").desc(),
+        F.col("_batch_id").desc(),
+    )
+
+    return (
+        df.withColumn(
+            "_row_number",
+            F.row_number().over(window),
+        )
         .filter(F.col("_row_number") == 1)
         .drop("_row_number")
     )
@@ -47,9 +78,9 @@ def add_silver_metadata(
 
 def get_unprocessed_batches(
     spark,
-    source_table: str,
-    control_table: str,
-    dataset_name: str,
+    source_table,
+    control_table,
+    dataset_name,
 ) -> list[str]:
 
     source_batches = (
@@ -74,24 +105,20 @@ def get_unprocessed_batches(
 
     return [
         row["_batch_id"]
-        for row in (
-            source_batches.join(
-                processed_batches,
-                on="_batch_id",
-                how="left_anti",
-            )
-            .collect()
-        )
+        for row in source_batches.join(
+            processed_batches,
+            on="_batch_id",
+            how="left_anti",
+        ).collect()
     ]
 
 
 def merge_to_silver(
     spark,
-    df: DataFrame,
-    target_table: str,
-    key_columns: list[str],
-) -> None:
-
+    df,
+    target_table,
+    key_columns,
+):
     if not df.take(1):
         return
 
@@ -130,10 +157,9 @@ def merge_to_silver(
 
 def write_quarantine(
     spark,
-    df: DataFrame,
-    quarantine_table: str,
-) -> None:
-
+    df,
+    quarantine_table,
+):
     if not df.take(1):
         return
 
@@ -152,9 +178,8 @@ def write_quarantine(
 
 def ensure_processed_batches_table(
     spark,
-    control_table: str,
-) -> None:
-
+    control_table,
+):
     if spark.catalog.tableExists(control_table):
         return
 
@@ -175,11 +200,10 @@ def ensure_processed_batches_table(
 
 def mark_batches_processed(
     spark,
-    control_table: str,
-    dataset_name: str,
-    batch_ids: list[str],
-) -> None:
-
+    control_table,
+    dataset_name,
+    batch_ids,
+):
     if not batch_ids:
         return
 
@@ -194,7 +218,10 @@ def mark_batches_processed(
                 (dataset_name, batch_id)
                 for batch_id in batch_ids
             ],
-            ["dataset", "_batch_id"],
+            [
+                "dataset",
+                "_batch_id",
+            ],
         )
         .withColumn(
             "_processed_timestamp",
@@ -222,13 +249,11 @@ def mark_batches_processed(
 
 
 def transform_silver(
-    df: DataFrame,
-    key_columns: list[str],
-    environment: str,
-) -> DataFrame:
-
+    df,
+    key_columns,
+    environment,
+):
     df = standardize_columns(df)
-
     df = deduplicate(
         df,
         key_columns=key_columns,
