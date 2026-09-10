@@ -69,6 +69,8 @@ datasets:
             value: 0
             reason: "discount_amount must be >= 0"
 
+  ecommerce:
+
     clickstream:
       path: ecommerce/clickstream
       format: csv
@@ -109,7 +111,6 @@ datasets:
             rule: greater_than_or_equal
             value: 0
             reason: "refund_amount must be >= 0"
-
 
   marketing:
 
