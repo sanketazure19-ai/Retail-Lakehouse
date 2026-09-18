@@ -55,29 +55,29 @@ targets:
             - name: dev-e2e-job
               job:
                 id: 181465937795383
-                permission: CAN_MANAGE_RUN
+                permission: CAN_MANAGE
 
             - name: staging-e2e-job
               job:
                 id: 111087231222807
-                permission: CAN_MANAGE_RUN
+                permission: CAN_MANAGE
 
             - name: prod-e2e-job
               job:
                 id: 1075333659553042
-                permission: CAN_MANAGE_RUN
+                permission: CAN_MANAGE
 
             - name: dev-qa-job
               job:
                 id: 722805828641785
-                permission: CAN_MANAGE_RUN
+                permission: CAN_MANAGE
 
             - name: staging-qa-job
               job:
                 id: 190050847337594
-                permission: CAN_MANAGE_RUN
+                permission: CAN_MANAGE
 
             - name: prod-qa-job
               job:
                 id: 513634613139846
-                permission: CAN_MANAGE_RUN
+                permission: CAN_MANAGE
