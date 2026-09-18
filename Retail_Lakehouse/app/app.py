@@ -46,19 +46,41 @@ def run_job(job_id: str, parameters: dict | None = None) -> int:
     )
     return int(response.run_id)
 
-
 def wait_for_run(run_id: int, label: str, timeout_seconds: int = 1800) -> dict:
     client = get_workspace_client()
     started = time.time()
     placeholder = st.empty()
+
     while time.time() - started < timeout_seconds:
         run = client.jobs.get_run(run_id=run_id)
         state = run.state
-        life_cycle = str(getattr(state, "life_cycle_state", "") or "")
-        result = str(getattr(state, "result_state", "") or "")
-        placeholder.info(f"{label}: {life_cycle}" + (f" / {result}" if result else ""))
-        if result in TERMINAL or life_cycle in {"TERMINATED", "SKIPPED", "INTERNAL_ERROR"}:
+
+        life_cycle_state = getattr(state, "life_cycle_state", None)
+        result_state = getattr(state, "result_state", None)
+
+        # Databricks SDK returns enum objects such as
+        # RunLifeCycleState.TERMINATED and RunResultState.SUCCESS.
+        # Use .value so comparisons are against "TERMINATED"/"SUCCESS".
+        life_cycle = getattr(life_cycle_state, "value", None) or str(
+            life_cycle_state or ""
+        )
+
+        result = getattr(result_state, "value", None) or str(
+            result_state or ""
+        )
+
+        placeholder.info(
+            f"{label}: {life_cycle}"
+            + (f" / {result}" if result else "")
+        )
+
+        if result in TERMINAL or life_cycle in {
+            "TERMINATED",
+            "SKIPPED",
+            "INTERNAL_ERROR",
+        }:
             placeholder.empty()
+
             return {
                 "run_id": run_id,
                 "life_cycle_state": life_cycle,
@@ -66,9 +88,18 @@ def wait_for_run(run_id: int, label: str, timeout_seconds: int = 1800) -> dict:
                 "state_message": getattr(state, "state_message", ""),
                 "run_page_url": getattr(run, "run_page_url", ""),
             }
+
         time.sleep(5)
-    placeholder.error(f"{label} timed out after {timeout_seconds // 60} minutes.")
-    return {"run_id": run_id, "life_cycle_state": "TIMEOUT", "result_state": "TIMEDOUT"}
+
+    placeholder.error(
+        f"{label} timed out after {timeout_seconds // 60} minutes."
+    )
+
+    return {
+        "run_id": run_id,
+        "life_cycle_state": "TIMEOUT",
+        "result_state": "TIMEDOUT",
+    }
 
 
 def get_output(run_id: int) -> dict:
