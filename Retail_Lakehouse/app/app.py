@@ -72,10 +72,42 @@ def wait_for_run(run_id: int, label: str, timeout_seconds: int = 1800) -> dict:
 
 
 def get_output(run_id: int) -> dict:
-    output = get_workspace_client().jobs.get_run_output(run_id=run_id)
-    raw = getattr(getattr(output, "notebook_output", None), "result", None)
+    client = get_workspace_client()
+
+    run = client.jobs.get_run(run_id=run_id)
+
+    # Multi-task jobs expose notebook output on the child task run.
+    tasks = getattr(run, "tasks", None) or []
+
+    if tasks:
+        qa_task = next(
+            (
+                task
+                for task in tasks
+                if getattr(task, "task_key", "") == "qa_validation"
+            ),
+            None,
+        )
+
+        if qa_task is None:
+            qa_task = tasks[0]
+
+        task_run_id = int(qa_task.run_id)
+    else:
+        # Supports single-task jobs as well.
+        task_run_id = run_id
+
+    output = client.jobs.get_run_output(run_id=task_run_id)
+
+    raw = getattr(
+        getattr(output, "notebook_output", None),
+        "result",
+        None,
+    )
+
     if not raw:
         return {}
+
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
