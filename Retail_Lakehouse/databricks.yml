@@ -45,6 +45,13 @@ targets:
             timezone_id: "Asia/Kolkata"
             pause_status: UNPAUSED
 
+          permissions:
+            - service_principal_name: "b50e1681-715e-4ea7-972c-802a861bc153"
+              level: IS_OWNER
+
+            - service_principal_name: "2ab4876b-fbde-4253-8f50-480d4de495e9"
+              level: CAN_MANAGE_RUN
+
       apps:
         retail_lakehouse_qa:
           name: retail-lakehouse-qa
