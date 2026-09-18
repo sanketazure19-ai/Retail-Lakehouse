@@ -10,17 +10,17 @@ ENVIRONMENTS = {
     "DEV": {
         "catalog": "retail_dev",
         "e2e_job": os.getenv("DEV_E2E_JOB_ID", ""),
-        "qa_job": os.getenv("QA_JOB_ID", ""),
+        "qa_job": os.getenv("DEV_QA_JOB_ID", ""),
     },
     "STAGING": {
         "catalog": "retail_staging",
         "e2e_job": os.getenv("STAGING_E2E_JOB_ID", ""),
-        "qa_job": os.getenv("QA_JOB_ID", ""),
+        "qa_job": os.getenv("STAGING_QA_JOB_ID", ""),
     },
     "PROD": {
         "catalog": "retail_prod",
         "e2e_job": os.getenv("PROD_E2E_JOB_ID", ""),
-        "qa_job": os.getenv("QA_JOB_ID", ""),
+        "qa_job": os.getenv("PROD_QA_JOB_ID", ""),
     },
 }
 
@@ -97,7 +97,13 @@ def run_qa(env: str, qa_job_id: str) -> dict:
 st.title("🧪 GlobalMart Retail Lakehouse — QA Automation")
 st.caption("End-to-end validation for Bronze → Silver → Gold, DQ, integrity and idempotency.")
 
-environment = st.sidebar.selectbox("Environment", list(ENVIRONMENTS.keys()))
+environment = st.sidebar.selectbox(
+    "Environment",
+    list(ENVIRONMENTS.keys()),
+    index=list(ENVIRONMENTS.keys()).index(
+        os.getenv("DEFAULT_ENVIRONMENT", "PROD")
+    ),
+)
 cfg = ENVIRONMENTS[environment]
 
 st.sidebar.markdown(f"**Catalog:** `{cfg['catalog']}`")
