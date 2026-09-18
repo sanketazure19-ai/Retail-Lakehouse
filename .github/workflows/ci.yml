@@ -19,6 +19,7 @@ jobs:
   validate:
     name: Build and Validate
     runs-on: ubuntu-latest
+    environment: dev
 
     steps:
       - name: Checkout
@@ -50,5 +51,9 @@ jobs:
         uses: databricks/setup-cli@main
 
       - name: Validate DEV bundle
+        env:
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
           databricks bundle validate --target dev
