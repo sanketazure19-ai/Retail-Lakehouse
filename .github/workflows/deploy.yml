@@ -201,9 +201,26 @@ jobs:
         run: |
           databricks bundle validate --target prod
 
+      - name: Bind existing PROD QA App
+        run: |
+          databricks bundle deployment bind \
+            retail_lakehouse_qa \
+            retail-lakehouse-qa \
+            --target prod \
+            --auto-approve
+
       - name: Deploy PROD
         run: |
           databricks bundle deploy --target prod
+
+      - name: Redeploy PROD QA App
+        run: |
+          databricks bundle run retail_lakehouse_qa --target prod
+
+      - name: PROD deployment summary
+        run: |
+          echo "PROD deployment completed"
+          echo "Commit: $GITHUB_SHA"
 
       - name: PROD deployment summary
         run: |
