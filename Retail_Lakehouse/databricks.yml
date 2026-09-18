@@ -37,9 +37,47 @@ targets:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
 
     resources:
+
       jobs:
         retail_lakehouse_pipeline:
           schedule:
             quartz_cron_expression: "0 50 23 * * ?"
             timezone_id: "Asia/Kolkata"
             pause_status: UNPAUSED
+
+      apps:
+        retail_lakehouse_qa:
+          name: retail-lakehouse-qa
+          description: "GlobalMart Retail Lakehouse QA automation dashboard"
+          source_code_path: app
+
+          resources:
+            - name: dev-e2e-job
+              job:
+                id: 181465937795383
+                permission: CAN_MANAGE_RUN
+
+            - name: staging-e2e-job
+              job:
+                id: 111087231222807
+                permission: CAN_MANAGE_RUN
+
+            - name: prod-e2e-job
+              job:
+                id: 1075333659553042
+                permission: CAN_MANAGE_RUN
+
+            - name: dev-qa-job
+              job:
+                id: 722805828641785
+                permission: CAN_MANAGE_RUN
+
+            - name: staging-qa-job
+              job:
+                id: 190050847337594
+                permission: CAN_MANAGE_RUN
+
+            - name: prod-qa-job
+              job:
+                id: 513634613139846
+                permission: CAN_MANAGE_RUN
