@@ -2,16 +2,21 @@ resources:
   jobs:
     qa_automation:
       name: "[${bundle.target}] Retail Lakehouse - QA Automation"
+
+      permissions:
+        - service_principal_name: "b50e1681-715e-4ea7-972c-802a861bc153"
+          level: CAN_MANAGE_RUN
+
       environments:
         - environment_key: default
           spec:
             client: "4"
             dependencies:
               - ../../dist/*.whl
+
       tasks:
         - task_key: qa_validation
           notebook_task:
             notebook_path: ../../src/notebooks/06_qa_automation.py
             base_parameters:
-              environment: ${bundle.target}
-          environment_key: default
+              environment: ${bundle.t
