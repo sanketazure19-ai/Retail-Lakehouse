@@ -213,8 +213,3 @@ jobs:
         run: |
           echo "PROD deployment completed"
           echo "Commit: $GITHUB_SHA"
-
-      - name: PROD deployment summary
-        run: |
-          echo "PROD deployment completed"
-          echo "Commit: $GITHUB_SHA"
