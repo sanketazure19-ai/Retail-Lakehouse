@@ -104,7 +104,7 @@ validation_rules = silver_config.get(
 
 source_table = f"{catalog}.bronze.{dataset_name}"
 target_table = f"{catalog}.silver.{dataset_name}"
-quarantine_table = f"{catalog}.bronze_quarantine.{dataset_name}"
+quarantine_table = f"{catalog}.silver_quarantine.{dataset_name}"
 control_table = f"{catalog}.silver.processed_batches"
 
 
