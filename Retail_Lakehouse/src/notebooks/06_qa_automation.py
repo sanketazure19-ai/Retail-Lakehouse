@@ -114,7 +114,11 @@ for dataset, columns in bronze_specs.items():
 
         df = spark.table(full_name)
         rescued = df.filter(F.col("_rescued_data").isNotNull()).count() if "_rescued_data" in df.columns else 0
-        corrupt = df.filter(F.col("_corrupt_record").isNotNull()).count()
+        corrupt = (
+    df.filter(F.col("_corrupt_record").isNotNull()).count()
+    if "_corrupt_record" in df.columns
+    else 0
+)
         record(
             f"{full_name} technical ingestion quality",
             "BRONZE",
