@@ -11,7 +11,7 @@ resources:
       tasks:
         - task_key: qa_validation
           notebook_task:
-            notebook_path: ../../src/notebooks/05_qa_automation.py
+            notebook_path: ../../src/notebooks/06_qa_automation.py
             base_parameters:
               environment: ${bundle.target}
           environment_key: default
