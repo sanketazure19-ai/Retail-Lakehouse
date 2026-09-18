@@ -5,7 +5,7 @@ resources:
 
       permissions:
         - service_principal_name: "b50e1681-715e-4ea7-972c-802a861bc153"
-          level: CAN_MANAGE_RUN
+          level: CAN_MANAGE
 
       environments:
         - environment_key: default
