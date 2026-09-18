@@ -1,0 +1,15 @@
+command:
+  - streamlit
+  - run
+  - app.py
+env:
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"
+  - name: DEV_E2E_JOB_ID
+    valueFrom: dev-e2e-job
+  - name: QA_JOB_ID
+    valueFrom: qa-job
+  - name: STAGING_E2E_JOB_ID
+    valueFrom: staging-e2e-job
+  - name: PROD_E2E_JOB_ID
+    valueFrom: prod-e2e-job
