@@ -1,1 +1,23 @@
-
+resources:
+  apps:
+    retail_lakehouse_qa:
+      name: retail-lakehouse-qa
+      description: "GlobalMart Retail Lakehouse QA automation dashboard"
+      source_code_path: ../../app
+      resources:
+        - name: dev-e2e-job
+          job:
+            id: "181465937795383"
+            permission: CAN_MANAGE_RUN
+        - name: staging-e2e-job
+          job:
+            id: "111087231222807"
+            permission: CAN_MANAGE_RUN
+        - name: prod-e2e-job
+          job:
+            id: "221827261212749"
+            permission: CAN_MANAGE_RUN
+        - name: qa-job
+          job:
+            id: ${resources.jobs.qa_automation.id}
+            permission: CAN_MANAGE_RUN
